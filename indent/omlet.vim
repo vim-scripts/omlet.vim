@@ -2,7 +2,8 @@
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
 " Last Change: 2005 Feb 09
-" Changelog:   - Second loading did nothing interesting, now corrected.
+" Changelog:   - bug with indentation after <fun> (s:blockstop+=<fun>)
+"              - Second loading did nothing interesting, now corrected.
 "              - Indentation of and in let definitions
 "              - Syntax highlighting is turned on, cause I rely on synIDs
 "              - Indentation of ;; and correction of a bug related to
@@ -33,11 +34,10 @@
 " along with this program; if not, write to the Free Software
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-" TODO AtomBackward() does not completely handle comments
-" it should use s:search, and maybe skip :: & co in one step
-" TODO indentation fun/arg shouldn't be strict ?
+" TODO indentation fun/arg shouldn't be strict (relative) ?
 " TODO take a look at error matching facilities provided by official ocaml.vim
 " TODO cannot re-indent when || is typed at begining of line
+" TODO indenting a whole file is *really* slow
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent")
@@ -91,7 +91,7 @@ endfunction
 " Goes to the beginning of the previous (exclusive) block.
 " It is stopped by any non-trivial syntax.
 
-let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
+let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<fun\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
 
 function OMLetAtomBackward()
   let s = s:save()

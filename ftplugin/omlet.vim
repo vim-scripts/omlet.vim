@@ -1,9 +1,19 @@
 " Language:    OCaml
-" Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Feb 02
+" Maintainer:  David Baelde        <firstname.name@ens-lyon.org>
+"              Mike Leary          <leary@nwlink.com>
+"              Markus Mottl        <markus@oefai.at>
+"              Stefano Zacchiroli  <zack@bononia.it>
+"
+" Last Change: 2005 Feb 09
+" Changelog:   - Made folding settings local to the buffer
+"              - Included the official ftplugin ocaml.vim, except
+"                annotations stuff, and parenthesis around assert false
+"                abbreviation
+"              - Corrected toplevel let folding
+"              - Made the file reloading correctly
 
-" omlet.vim -- a set of files for working on OCaml code with VIm
-" Copyright (C) 2005 David Baelde
+" omlet.vim plugins -- utilities for working on OCaml files with VIm
+" Copyright (C) 2005 D. Baelde, M. Leary, M. Mottl, S. Zacchiroli
 "
 " This program is free software; you can redistribute it and/or modify
 " it under the terms of the GNU General Public License as published by
@@ -19,6 +29,81 @@
 " along with this program; if not, write to the Free Software
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+" TODO annotations
+
+" Do these settings once per buffer
+if exists("b:did_ftplugin")
+  finish
+endif
+let b:did_ftplugin=1
+
+" Error handling -- helps moving where the compiler wants you to go
+set cpo-=C
+setlocal efm=
+      \%EFile\ \"%f\"\\,\ line\ %l\\,\ characters\ %c-%*\\d:,
+      \%EFile\ \"%f\"\\,\ line\ %l\\,\ character\ %c:%m,
+      \%+EReference\ to\ unbound\ regexp\ name\ %m,
+      \%Eocamlyacc:\ e\ -\ line\ %l\ of\ \"%f\"\\,\ %m,
+      \%Wocamlyacc:\ w\ -\ %m,
+      \%-Zmake%.%#,
+      \%C%m
+
+" Add mappings, unless the user didn't want this.
+if !exists("no_plugin_maps") && !exists("no_ocaml_maps")
+  " (un)commenting
+  if !hasmapto('<Plug>Comment')
+    nmap <buffer> <LocalLeader>c <Plug>LUncomOn
+    vmap <buffer> <LocalLeader>c <Plug>BUncomOn
+    nmap <buffer> <LocalLeader>C <Plug>LUncomOff
+    vmap <buffer> <LocalLeader>C <Plug>BUncomOff
+  endif
+
+  nnoremap <buffer> <Plug>LUncomOn mz0i(* <ESC>$A *)<ESC>`z
+  nnoremap <buffer> <Plug>LUncomOff <ESC>:s/^(\* \(.*\) \*)/\1/<CR>
+  vnoremap <buffer> <Plug>BUncomOn <ESC>:'<,'><CR>`<O<ESC>0i(*<ESC>`>o<ESC>0i*)<ESC>`<
+  vnoremap <buffer> <Plug>BUncomOff <ESC>:'<,'><CR>`<dd`>dd`<
+
+  if !hasmapto('<Plug>Abbrev')
+    iabbrev <buffer> ASS assert false
+  endif
+endif
+
+" Let % jump between structure elements (due to Issac Trotts)
+let b:mw='\<let\>:\<and\>:\(\<in\>\|;;\),'
+let b:mw=b:mw . '\<if\>:\<then\>:\<else\>,\<do\>:\<done\>,'
+let b:mw=b:mw . '\<\(object\|sig\|struct\|begin\)\>:\<end\>'
+let b:match_words=b:mw
+
+" switching between interfaces (.mli) and implementations (.ml)
+if !exists("g:did_ocaml_switch")
+  let g:did_ocaml_switch = 1
+  map <LocalLeader>s :call OCaml_switch(0)<CR>
+  map <LocalLeader>S :call OCaml_switch(1)<CR>
+  fun OCaml_switch(newwin)
+    if (match(bufname(""), "\\.mli$") >= 0)
+      let fname = substitute(bufname(""), "\\.mli$", ".ml", "")
+      if (a:newwin == 1)
+        exec "new " . fname
+      else
+        exec "arge " . fname
+      endif
+    elseif (match(bufname(""), "\\.ml$") >= 0)
+      let fname = bufname("") . "i"
+      if (a:newwin == 1)
+        exec "new " . fname
+      else
+        exec "arge " . fname
+      endif
+    endif
+  endfun
+endif
+
+" Folding is activated if omlet_fold is set
+if !exists("no_ocaml_folding")
+  setlocal foldmethod=expr
+  setlocal foldexpr=OMLetFoldLevel(v:lnum)
+endif
+
 if exists("*OMLetFoldLevel")
   finish
 endif
@@ -31,7 +116,7 @@ function s:topindent(lnum)
     endif
     let l = l-1
   endwhile
-  return 0
+  return -2
 endfunction
 
 function OMLetFoldLevel(l)
@@ -64,7 +149,3 @@ function OMLetFoldLevel(l)
 
   return '='
 endfunction
-
-set foldmethod=expr
-set foldexpr=OMLetFoldLevel(v:lnum)
-

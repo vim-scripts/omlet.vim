@@ -5,19 +5,28 @@ Copyright (c) 2005 David Baelde
 OMLet includes:
  - A slightly modified syntax file;
  - A much better indentation, which aims at becoming as good as Tuareg;
- - A plugin which performs folding -- I like it a lot, but if you don't want
-   it you can simply turn it off using the following command in your
-   ~/.vimrc:
-    autocmd FileType omlet set foldmethod=manual
-   Deleting ~/.vim/ftplugin/omlet.vim also works ;)
+ - A plugin which performs folding, plus the official features
+   you can simply turn folding off: define no_ocaml_folding in your .vimrc
+   > let no_ocaml_folding=1
+   If you don't want omlet to set key bindings, define no_ocaml_maps or
+   no_plugin_maps.
+
+Tricks
+------
+
+If you like to check type annotations, try my script at:
+http://www.vim.org/scripts/script.php?script_id=1197
+I'm currently thinking about the best solution for that, maybe I'll finally
+include Zack's python code...
+
+Key mappings are prefixed by <LocalLeader>, which defaults to \.
+If you find something like . or , more accessible, customize your .vimrc:
+> let maplocalleader="."
 
 If you've been using emacs for a while, you might be a <tab> addict.
 Adding the following line to your .vimrc will make <tab> run indentation
 when hit in insert mode (C-f is the default for that in vim):
 autocmd FileType omlet set indentkeys+=,!^I
-
-If you like to check type annotations, try my script at:
-http://www.vim.org/scripts/script.php?script_id=1197
 
 Omlet indents with spaces, so if you want a full compatibility with emacs's
 tuareg-mode, it is recommended to use space-only indentation with emacs:
