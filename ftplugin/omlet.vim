@@ -98,7 +98,7 @@ if !exists("g:did_ocaml_switch")
   endfun
 endif
 
-" Folding is activated if omlet_fold is set
+" Folding is activated if ocaml_folding is set
 if !exists("no_ocaml_folding")
   setlocal foldmethod=expr
   setlocal foldexpr=OMLetFoldLevel(v:lnum)

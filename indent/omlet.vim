@@ -1,8 +1,10 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Feb 16
-" Changelog:   - Major bug with sum types definition was corrected, and
+" Last Change: 2005 Feb 21
+" Changelog:   - Much more customization
+"              - (Almost) fully flexible indentation (not "strict" anymore)
+"              - Major bug with sum types definition was corrected, and
 "                polymorphic variants support added, -- thanks Zack !
 "              - Added option "ocaml_noindent_let", many fixes -- thanks to
 "                Pierre Habouzit !
@@ -39,11 +41,8 @@
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 " TODO cannot re-indent when || is typed at begining of line
-" TODO indenting a whole file is *really* slow
-" TODO customization: indentation of patterns (try,match,function),
-" default increment (use shiftwidth)
-" TODO s:indent should take into account ( before master keyword, as in
-" tuareg mode ?
+" TODO indentation is still strict for fun/arg and sequence
+"      flexibility causes problems with patterns
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent")
@@ -63,6 +62,20 @@ if exists("*GetOMLetIndent")
   finish
 endif
 let b:did_indent = 1
+
+function s:default(s,v)
+  if exists(a:s)
+    exe "return" a:s
+  else
+    return a:v
+  endif
+endfunction
+
+let s:i = s:default("g:omlet_indent",2)
+let s:i_struct = s:default("g:omlet_indent_struct",s:i)
+let s:i_match = s:default("g:omlet_indent_match",s:i)
+let s:i_function = s:default("g:omlet_indent_function",s:i)
+let s:i_let = s:default("g:omlet_indent_let",s:i)
 
 " {{{ A few utils
 
@@ -272,15 +285,14 @@ endfunction
 " The goal is to return a 'correct' indentation,
 " assuming that the previous lines are well indented.
 
-function s:indent(l)
-  " Two possible indentation modes:
-  " 1. (stricter) relative
-  " return col(a:l)-1
-  " 2. (more usual) incremental
-  if getline(a:l) =~ '^\s*|'
-    return indent(a:l)+2
+function s:indent()
+  if search('[(\[{].*\%#','bW')
+    call search('\S')
+    return col('.')-1
+  elseif getline('.') =~ '^\s*|'
+    return indent('.')+2
   else
-    return indent(a:l)
+    return indent('.')
   endif
 endfunction
 
@@ -289,9 +301,11 @@ function GetOMLetIndent(l)
   " Go to the first non-blank char on the line to be indented.
   exe a:l
 
-  " Indentation inside comments
+  " Indentation inside comments -- needs the comment to be closed!
+  " TODO something weird is happening when inserting \n before ending *)
   if synIDattr(synID(line("."), col("."), 0), "name") =~? 'comment'
     let s = s:save()
+    " TODO The next analysis should avoid strings
     call searchpair('(\*','','\*)','bW')
     if s != s:save()
       " We were strictly inside the comment, and we are now at its beginning
@@ -320,22 +334,22 @@ function GetOMLetIndent(l)
 
   if getline(a:l) =~ '^\s*\<end\>'
     call s:searchpair(s:begend,'','\<end\>','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*}'
     call s:searchpair('{','','}','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*)'
     call s:searchpair('(','',')','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*\]'
     call s:searchpair('\[','','\]','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   " WHILE and FOR
@@ -343,12 +357,12 @@ function GetOMLetIndent(l)
   if getline(a:l) =~ '^\s*\<done\>'
     call s:searchpair('\<do\>','','\<done\>','bW')
     call s:searchpair('\%(\<while\>\|\<for\>\)','','\<do\>','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*\<do\>'
     call s:searchpair('\<\(while\|for\)\>','','\<do\>','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   " PATTERNS
@@ -357,19 +371,19 @@ function GetOMLetIndent(l)
   " since I align patterns on 'match'
   if getline(a:l) =~ '^\s*with\>'
     call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
-    return col(".")-1
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*->'
     call OMLetPatternBackward()
-    return col(".")+1
+    return s:indent()+s:i
   endif
 
   " IF/THEN/ELSE
 
   if getline(a:l) =~ '^\s*\<then\>'
     call s:searchpair('\<if\>','','\<then\>','bW')
-    return col(".")-1
+    return s:indent()
   endif
 
   if getline(a:l) =~ '^\s*else\>'
@@ -377,29 +391,28 @@ function GetOMLetIndent(l)
     if s:search('\<then\_s*\%#')
       call s:searchpair('\<if\>','','\<then\>','bW')
     endif
-    return col(".")-1
+    return s:indent()
   endif
 
   " ;; alone is indented as toplevel defs
   if getline(a:l) =~ '^\s*;;'
     if OMLetBegendBackward()
-      return col('.')+1
+      return s:indent()+s:i_struct
     else
       return 0
     endif
   endif
 
-  " The problem with { is that it gets standard indentation
-  " except in type definitions, where the standard is +4, and I need to
-  " put it back to the "normal" indentation, which isn't obvious
-  if getline(a:l) =~ '^\s*{'
-    return s:indent(a:l-1)+2 " TODO that's weak !
-  endif
+  " { and [ may need to be reindented in type definitions, where they don't
+  " really deserve the default +4 indentation
+  " if getline(a:l) =~ '^\s*{'
+  "   return s:indent(a:l-1)+2 " TODO that's weak !
+  " endif
 
   " Easy toplevel definitions
   if getline(a:l) =~ '^\s*\%(\<open\>\|\<include\>\|\<struct\>\|\<object\>\|\<sig\>\|\<val\>\|\<module\>\|\<class\>\|\<type\>\|\<method\>\|\<initializer\>\|\<inherit\>\|\<exception\>\|\<external\>\)'
     if s:searchpair(s:begend,'','\<end\>','bW')
-      return s:indent('.')+2
+      return s:indent()+s:i_struct
     else
       return 0
     endif
@@ -410,20 +423,20 @@ function GetOMLetIndent(l)
   " let after a high-level end (not matching a begin)
   if getline(a:l) =~ '^\s*let\>' && s:search('\<end\>\_s*\%#') && synIDattr(synID(line('.'),col('.'),0),'name') != 'ocamlKeyword'
     call OMLetBegendBackward()
-    return s:indent('.')
+    return s:indent()
   else
     exe a:l
   endif
 
   " let at the beginning of a structure
   if getline(a:l) =~ '^\s*let\>' && s:search('\<struct\>\_s*\%#')
-    return s:indent('.')+2
+    return s:indent()+s:i_struct
   endif
 
   " let after another value-level construct
   if getline(a:l) =~ '^\s*let\>' && (OMLetAtomBackward() || search(';;\_s*\%#'))
     if OMLetBegendBackward()
-      return s:indent('.')+2
+      return s:indent()+s:i_struct
     else
       return 0
     endif
@@ -435,7 +448,7 @@ function GetOMLetIndent(l)
   " let/and
   if getline(a:l) =~ '^\s*and\>' && OMLetBlockBackward('',0)
     if s:search('\%(\<let\>\|\<and\>\)\_[^=]\+=\_s*\%#')
-      return s:indent(".")
+      return s:indent()
     else
       exe a:l
     endif
@@ -444,19 +457,19 @@ function GetOMLetIndent(l)
   " Now we deal with let/in
   if getline(a:l) =~ '^\s*in\>'
     call s:searchpair('\<let\>','','\<in\>','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   " let after let isn't indented
   if getline(a:l) =~ '^\s*\<let\>' && s:search('\<in\>\_s*\%#')
     call s:searchpair('\<let\>','','\<in\>','bW')
-    return s:indent(".")
+    return s:indent()
   endif
 
   " && and ||
   if getline(a:l) =~ '^\s*\%(||\|&&\)'
     call OMLetExprBackward('',0)
-    return col(".")-1
+    return s:indent()
   endif
 
   " Matching clause marker |
@@ -464,13 +477,15 @@ function GetOMLetIndent(l)
     call OMLetBlockBackward('match',0,1)
     if s:search('|\_s*\%#')
       " We are stuck on a 0-ary constructor
-      return col(".")-1
+      return s:indent()
     elseif s:search('\[\_s*\%#')
       " Polymorphic variant
-      return s:indent(".")
+      return s:indent()
+    elseif s:search('function\_s*\%#')
+      return s:indent()+s:i_function
     else
       call OMLetMatchHeadBackward()
-      return col(".")+1
+      return s:indent()+s:i_match
     endif
   endif
 
@@ -480,74 +495,75 @@ function GetOMLetIndent(l)
   " Howto indent a line after some keyword
 
   " Basic case
-  if s:search('\(\<begin\>\|\<match\>\|\<try\>\|\<struct\>\|\<sig\>\|\<class\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
-    return s:indent(".")+2
+  if s:search('\(\<struct\>\|\<sig\>\|\<class\>\)\_s*\%#')
+    return s:indent()+s:i_struct
+  endif
+  if s:search('\(\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
+    return s:indent()+s:i
   endif
   if s:search('\%(\<let\>\|\<and\>\|\<module\>\|\<val\>\|\<method\>\)\_[^=]\+=\_s*\%#')
-    return s:indent(".")+2
+    return s:indent()+s:i
   endif
 
   " PATTERNS
   if s:search('\<function\>\_s*\%#')
-    return col(".")+3
+    return s:indent()+2+s:i_function
   endif
   if s:search('\<with\>\_s*\%#')
     call s:searchpair('\%(\<match\>\|\<try\>\)','','\<with\>','bW')
-    return col(".")+3
+    return s:indent()+2+s:i_match
   endif
   if s:search('\<type\>\_[^=]\+=\_s*\%#')
-    return col(".")+3
+    return s:indent()+2+s:i
   endif
   if s:search('\<of\>\_s*\%#')
-    return s:indent(".")+1
+    return s:indent()+s:i
   endif
 
   " Sometimes you increment according to a master keyword
 
   " IF
   if s:search('\<if\>\_s*\%#')
-    return col(".")+1
+    return s:indent()+s:i
   endif
   if s:search('\<then\>\_s*\%#')
     call s:searchpair('\<if\>','','\<then\>','bW')
-    return col(".")+1
+    return s:indent()+s:i
   endif
   if s:search('\<else\_s*\%#')
     call OMLetBlockBackward('then',0)
     call OMLetIfHeadBackward()
-    return col(".")+1
+    return s:indent()+s:i
   endif
 
   " MATCH
   if s:search('\<when\_s*\%#')
     call OMLetPatternBackward()
-    return s:indent(".")+2
+    return s:indent()+s:i
   endif
   if s:search('->\_s*\%#')
     call OMLetPatternBackward()
     call OMLetBlockBackward('match',0,1)
     call OMLetMatchHeadBackward()
     if search('\%#fun\>')
-      return s:indent(".")+2
+      return s:indent()+s:i
+    elseif search('\%#function\>')
+      return s:indent()+2+s:i+s:i_function
     else
-      return col(".")+5
+      return s:indent()+2+s:i+s:i_match
     endif
   endif
 
   " WHILE/DO
   if s:search('\<do\>\_s*\%#')
     call s:searchpair('\%(\<while\>\|\<for\>\)','','\<do\>','bW')
-    return s:indent(".")+2
+    return s:indent()+s:i
   endif
 
   " LET
   if s:search('\<in\>\_s*\%#')
     call s:searchpair('\<let\>','','\<in\>','bW')
-    if exists("g:ocaml_noindent_let")
-      return s:indent(".")
-    else
-      return s:indent(".")+2
-    endif
+    return s:indent()+s:i_let
   endif
 
   " }}}
@@ -556,13 +572,14 @@ function GetOMLetIndent(l)
 
   if s:search(';;\_s*\%#')
     if OMLetBegendBackward()
-      return col('.')+1
+      return s:indent()+s:i_struct
     else
       return 0
     endif
   endif
 
   if s:search('\%(;\|,\|||\|&&\)\_s*\%#')
+    " TODO here I could be a bit more flexible...
     call OMLetExprBackward('',0)
     return col(".")-1
   endif
@@ -570,8 +587,9 @@ function GetOMLetIndent(l)
   " Application: indentation between a function and its arguments
 
   if OMLetAtomBackward()
+    " TODO flexible indentation
     call OMLetAtomsBackward()
-    return col(".")+1
+    return col('.')-1+s:i
   else
     return 0
   endif
