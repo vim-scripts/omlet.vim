@@ -1,0 +1,17 @@
+
+ChangeLog for OMLet, the better OCaml mode for VIm
+Copyright (c) 2005 David Baelde
+
+2005/03/25 (0.12)
+* OMLet now overrides OCaml correctly. That's ugly but needed, because OCaml is installed with VIm.
+* Added OCaml modeline support
+* Prevented a few abusive autoindentation, when atoms begin like keywords ("incr"...)
+* Multiple comments are now aligned on the next real block
+* New option omlet_middle_comment, still has pb with autoindent
+* Corrected the parsing return value, indentation of "and" is OK now
+* Indentation code for ";" handles "bla ; bla ;\nbla" better
+* Added "mod"
+
+2005/03/14 (0.11)
+* Enhanced a lot the expression backward parsing, including many infix operators, which are now well considered regarding their binding power
+* s:indent() was enhanced a lot

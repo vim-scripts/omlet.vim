@@ -1,6 +1,6 @@
 .PHONY: install dist
 
-VERSION=0.11
+VERSION=0.12
 
 install:
 	BASE=$(HOME)/.vim make install-aux
@@ -24,7 +24,7 @@ D=/home/httpd/htdocs/david.baelde/productions/POOL
 dist:
 	rm -rf omlet-$(VERSION)
 	mkdir omlet-$(VERSION)
-	cp LICENSE README INSTALL Makefile omlet-$(VERSION)
+	cp LICENSE README INSTALL ChangeLog Makefile omlet-$(VERSION)
 	for i in indent syntax ftplugin ftdetect ; do \
 		mkdir omlet-$(VERSION)/$$i ; \
 		cp $$i/omlet.vim omlet-$(VERSION)/$$i ; \

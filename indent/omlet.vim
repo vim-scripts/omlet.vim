@@ -2,40 +2,20 @@
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
 " URL:         http://ocaml.info/vim/indent/omlet.vim
-" Last Change: 2005 Mar 10
+" Last Change: 2005 Mar 25
 " Changelog:
-"              - Enhanced a lot the expression backward parsing, including
+"         0.12 - Added OCaml modeline support
+"              - Prevented a few abusive autoindentation, when atoms begin
+"                like keywords ("incr"...)
+"              - Multiple comments are now aligned on the next real block
+"              - New option omlet_middle_comment, still has pb with autoindent
+"              - Corrected the parsing return value -- indentation of "and"
+"              - Indentation code for ";" handles "bla ; bla ;\nbla" better
+"              - Added "mod"
+"         0.11 - Enhanced a lot the expression backward parsing, including
 "                many infix operators, which are now well considered regarding
 "                their binding power
 "              - s:indent() was enhanced a lot
-"              - s:indent() needed more strictness with parenthesis..
-"              - Enhanced AtomBackward ("!" was not skipped)
-"              - Indentation on a newline after while/for was not working!
-"              - Simplified and corrected some issues with pattern operators
-"              - Improved indentation inside comments
-"              - ExprBackward isn't bothered anymore by comments at the
-"                beginning of an expr
-"              - Support for builtin "^"
-"              - Much more customization
-"              - (Almost) fully flexible indentation (not "strict" anymore)
-"              - Major bug with sum types definition was corrected, and
-"                polymorphic variants support added, -- thanks Zack !
-"              - Added option "ocaml_noindent_let", many fixes -- thanks to
-"                Pierre Habouzit !
-"              - Bug with indentation after <fun> (s:blockstop+=<fun>)
-"              - Second loading did nothing interesting, now corrected.
-"              - Indentation of and in let definitions
-"              - Syntax highlighting is turned on, cause I rely on synIDs
-"              - Indentation of ";;" and correction of a bug related to
-"                variables names beginning with "let" -- thanks to micha !
-"              - Toplevel "let" definitions after end of modules/classes
-"              - Corrected a bug related with garbage-eating operators
-"                (let-in does that, if-then doesn't)
-"              - Better mangement of "&&", "||" and ","
-"              - Basic jumping now goes threw "::", "@", "<-" ... and correctly
-"                goes back on for/while statements, and strings
-"              - Corrected a few indent vs. col problems
-"              - Added folding expression
 
 " omlet.vim -- a set of files for working on OCaml code with VIm
 " Copyright (C) 2005 David Baelde
@@ -55,9 +35,6 @@
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 " TODO cannot re-indent when || is typed at begining of line
-" TODO see what I can do for:
-" bla ; bla ;
-"       bla ;
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent")
@@ -66,31 +43,56 @@ endif
 let b:did_indent = 1
 
 setlocal expandtab
-setlocal comments=s1l:(*,mb:*,ex:*)
 setlocal fo=croq
 syntax enable
 setlocal indentexpr=GetOMLetIndent(v:lnum)
 setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*,0\,,0=::,0@,0+,0/,0-
 
-" Do not define our functions twice
-if exists("*GetOMLetIndent")
-  finish
+" Get the modeline
+let s:s = line2byte(line('.'))+col('.')-1
+if search('^\s*(\*:o\?caml:')
+  let s:modeline = getline(".")
+else
+  let s:modeline = ""
 endif
-let b:did_indent = 1
+if s:s > 0
+  exe 'goto' s:s
+endif
 
-function s:default(s,v)
-  if exists(a:s)
+" P is a modeline param name, S a global variable name, V the default value
+function! s:default(p,s,v)
+  let m = matchstr(s:modeline,a:p.'\s*=\s*\d\+')
+  if m != ""
+    return matchstr(m,'\d\+')
+  elseif exists(a:s)
     exe "return" a:s
   else
     return a:v
   endif
 endfunction
 
-let s:i = s:default("g:omlet_indent",2)
-let s:i_struct = s:default("g:omlet_indent_struct",s:i)
-let s:i_match = s:default("g:omlet_indent_match",s:i)
-let s:i_function = s:default("g:omlet_indent_function",s:i)
-let s:i_let = s:default("g:omlet_indent_let",s:i)
+let b:i = s:default("default","g:omlet_indent",2)
+let b:i_struct = s:default("struct","g:omlet_indent_struct",b:i)
+let b:i_match = s:default("match","g:omlet_indent_match",b:i)
+let b:i_function = s:default("fun","g:omlet_indent_function",b:i)
+let b:i_let = s:default("let","g:omlet_indent_let",b:i)
+let b:mb = s:default("xxx","g:omlet_middle_comment",1)
+
+if b:mb != 0
+  let b:mb = 1
+endif
+
+if b:mb == 1
+  setlocal comments=s1l:(*,mb:*,ex:*)
+else
+  setlocal comments=s1l:(*,ex:*)
+endif
+
+" Do not define our functions twice
+if exists("*GetOMLetIndent")
+  finish
+endif
+let b:did_indent = 1
 
 " {{{ A few utils
 
@@ -142,9 +144,8 @@ endfunction
 
 let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<fun\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
 
-let s:binop_core = '\%(,\|::\|@\|\^\|||\|&&\|\.\|#\|<-\|:=\|+\|\*\|/\|-\)'
+let s:binop_core = '\%(\<lor\>\|\<land\>\|\<lsr\>\|\<lsl\>\|\<asr\>\|\<asl\>\|\<mod\>\|,\|::\|@\|\^\|||\|&&\|\.\|<-\|:=\|+\|\*\|/\|-\)'
 " Thanks to ".", floating point arith operators are included...
-" "." and "#" shouldn't really be there actually, they're managed in class A
 let s:binop = s:binop_core.'\_s*\%#'
 
 function OMLetAtomBackward()
@@ -200,25 +201,34 @@ function OMLetAtomBackward()
 endfunction
 
 function OMLetABackward()
-  while OMLetAtomBackward()
-  endwhile
+  if OMLetAtomBackward()
+    while OMLetAtomBackward()
+    endwhile
+    return 1
+  else
+    return 0
+  endif
 endfunction
 
 function OMLetEBackward()
   if OMLetABackward()
-    return OMLetEBackward()
+    call OMLetEBackward()
+    return 1
   endif
 
   if s:search(s:binop)
-    return OMLetEBackward()
+    call OMLetEBackward()
+    return 1
   endif
 
   let s = s:save()
   if search('=\_s*\%#','bW')
     if search('\%(\<let\>\|\<val\>\|\<method\>\|\<type\>\)[^=]\+\%#','bW')
-      return s:restore(s)
+      call s:restore(s)
+      return 0
     else
-      return OMLetEBackward()
+      call OMLetEBackward()
+      return 1
     endif
   endif
 endfunction
@@ -341,6 +351,17 @@ function s:indent(...)
   return indent('.')
 endfunction
 
+function s:topindent(lnum)
+  let l = a:lnum
+  while l > 0
+    if getline(l) =~ '\s*\%(\<struct\>\|\<sig\>\|\<object\>\)'
+      return b:i_struct+indent(l)
+    endif
+    let l = l-1
+  endwhile
+  return 0
+endfunction
+
 function GetOMLetIndent(l)
 
   " Go to the first non-blank char on the line to be indented.
@@ -350,22 +371,41 @@ function GetOMLetIndent(l)
 
   " Inside comments -- needs the comment to be closed!
   if synIDattr(synID(line("."), col("."), 0), "name") == 'ocamlComment'
-    let s = s:save()
-    " TODO The next analysis should avoid strings
-    call searchpair('(\*','','\*)','bW')
-    if s != s:save()
+    " TODO the first line inside the comment isn't autoindented correctly
+    if searchpair('(\*','','\*)','bW')
       " We were strictly inside the comment, and we are now at its beginning
+      " Let's jump to the last *
       call search('\*\_[^\*]')
-      return col('.')-1
+      if b:mb == 0 && getline(a:l) !~ '^\s*\*)'
+        return col('.')+1
+      else
+        return col('.')-1
+      endif
     endif
     " No need to restore, there was no move
   endif
 
+  " A second comment is aligned on the first one..
+  if getline(a:l) =~ '^\s*(\*' && search('\*)\_s*\%#','bW')
+    call searchpair('(\*','','\*)','bW')
+    return indent(".")
+  endif
+
   " Comments with a blank line before them are indented as the next block
   if getline(a:l) =~ '^\s*(\*' && getline(a:l-1) =~ '^\s*$'
-    call searchpair('(\*','','\*)')
+    let ok = 1
+    while ok == 1
+      call searchpair('(\*','','\*)')
+      " TODO this would be better : /\%#\*)\_s*(/e
+      if getline(line('.')+1) =~ '^\s*(\*'
+        exe line('.')+1
+      else
+        let ok = 0
+      endtry
+    endwhile
+
     let new = nextnonblank(line('.')+1)
-    if new == a:l
+    if new == 0 || new == a:l
       return 0
     else
       return GetOMLetIndent(new)
@@ -379,8 +419,7 @@ function GetOMLetIndent(l)
 
   " Parenthesis-like closing
 
-  if getline(a:l) =~ '^\s*\<end\>'
-    call s:searchpair(s:begend,'','\<end\>','bW')
+  if getline(a:l) =~ '^\s*\<end\>' && s:searchpair(s:begend,'','\<end\>','bW')
     return s:indent()
   endif
 
@@ -401,21 +440,18 @@ function GetOMLetIndent(l)
 
   " WHILE and FOR
 
-  if getline(a:l) =~ '^\s*\<done\>'
-    call s:searchpair('\<do\>','','\<done\>','bW')
+  if getline(a:l) =~ '^\s*\<done\>' && s:searchpair('\<do\>','','\<done\>','bW')
     call s:searchpair('\%(\<while\>\|\<for\>\)','','\<do\>','bW')
     return s:indent()
   endif
 
-  if getline(a:l) =~ '^\s*\<do\>'
-    call s:searchpair('\<\(while\|for\)\>','','\<do\>','bW')
+  if getline(a:l) =~ '^\s*\<do\>' && s:searchpair('\<\(while\|for\)\>','','\<do\>','bW')
     return s:indent()
   endif
 
   " PATTERNS
 
-  if getline(a:l) =~ '^\s*\<with\>'
-    call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
+  if getline(a:l) =~ '^\s*\<with\>' && s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
     return s:indent()
   endif
 
@@ -437,10 +473,10 @@ function GetOMLetIndent(l)
       " Polymorphic variant
       return col(".")-1
     elseif s:search('function\_s*\%#')
-      return s:indent()+s:i_function
+      return s:indent()+b:i_function
     else
       call OMLetMatchHeadBackward()
-      return s:indent()+s:i_match
+      return s:indent()+b:i_match
     endif
   endif
 
@@ -452,8 +488,7 @@ function GetOMLetIndent(l)
 
   " IF/THEN/ELSE
 
-  if getline(a:l) =~ '^\s*\<then\>'
-    call s:searchpair('\<if\>','','\<then\>','bW')
+  if getline(a:l) =~ '^\s*\<then\>' && s:searchpair('\<if\>','','\<then\>','bW')
     return s:indent()
   endif
 
@@ -468,7 +503,7 @@ function GetOMLetIndent(l)
   " ;; alone is indented as toplevel defs
   if getline(a:l) =~ '^\s*;;'
     if OMLetBegendBackward()
-      return s:indent()+s:i_struct
+      return s:indent()+b:i_struct
     else
       return 0
     endif
@@ -483,7 +518,7 @@ function GetOMLetIndent(l)
   " Easy toplevel definitions
   if getline(a:l) =~ '^\s*\%(\<open\>\|\<include\>\|\<struct\>\|\<object\>\|\<sig\>\|\<val\>\|\<module\>\|\<class\>\|\<type\>\|\<method\>\|\<initializer\>\|\<inherit\>\|\<exception\>\|\<external\>\)'
     if s:searchpair(s:begend,'','\<end\>','bW')
-      return s:indent()+s:i_struct
+      return s:indent()+b:i_struct
     else
       return 0
     endif
@@ -501,13 +536,13 @@ function GetOMLetIndent(l)
 
   " let at the beginning of a structure
   if getline(a:l) =~ '^\s*let\>' && s:search('\<struct\>\_s*\%#')
-    return s:indent()+s:i_struct
+    return s:indent()+b:i_struct
   endif
 
   " let after another value-level construct
   if getline(a:l) =~ '^\s*let\>' && (OMLetAtomBackward() || search(';;\_s*\%#'))
     if OMLetBegendBackward()
-      return s:indent()+s:i_struct
+      return s:indent()+b:i_struct
     else
       return 0
     endif
@@ -526,9 +561,13 @@ function GetOMLetIndent(l)
   endif
 
   " Now we deal with let/in
-  if getline(a:l) =~ '^\s*in\>'
-    call s:searchpair('\<let\>','','\<in\>','bW')
-    return s:indent()
+  if getline(a:l) =~ '^\s*in\>' && s:searchpair('\<let\>','','\<in\>','bW')
+    " Check that we don't have a toplevel let
+    if s:indent() == s:topindent('.')
+      exe a:l
+    else
+      return s:indent()
+    endif
   endif
 
   " let after let isn't indented
@@ -544,28 +583,28 @@ function GetOMLetIndent(l)
 
   " Basic case
   if s:search('\(\<struct\>\|\<sig\>\|\<class\>\)\_s*\%#')
-    return s:indent()+s:i_struct
+    return s:indent()+b:i_struct
   endif
   if s:search('\(\<while\>\|\<for\>\|\<if\>\|\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
   if s:search('\%(\<let\>\|\<and\>\|\<module\>\|\<val\>\|\<method\>\)\_[^=]\+=\_s*\%#')
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
 
   " PATTERNS
   if s:search('\<function\>\_s*\%#')
-    return s:indent()+2+s:i_function
+    return s:indent()+2+b:i_function
   endif
   if s:search('\<with\>\_s*\%#')
     call s:searchpair('\%(\<match\>\|\<try\>\)','','\<with\>','bW')
-    return s:indent()+2+s:i_match
+    return s:indent()+2+b:i_match
   endif
   if s:search('\<type\>\_[^=]\+=\_s*\%#')
-    return s:indent()+2+s:i
+    return s:indent()+2+b:i
   endif
   if s:search('\<of\>\_s*\%#')
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
 
   " Sometimes you increment according to a master keyword
@@ -573,46 +612,46 @@ function GetOMLetIndent(l)
   " IF
   if s:search('\<then\>\_s*\%#')
     call s:searchpair('\<if\>','','\<then\>','bW')
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
   if s:search('\<else\>\_s*\%#')
     call OMLetBlockBackward('then',0)
     call OMLetIfHeadBackward()
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
 
   " MATCH
   if s:search('\<when\>\_s*\%#')
     call OMLetPatternBackward()
     if search('\%#|')
-      return s:indent(1)+2+s:i
+      return s:indent(1)+2+b:i
     else
       " First pattern can have no |
-      return s:indent()+s:i
+      return s:indent()+b:i
     endif
   endif
   if s:search('->\_s*\%#')
     call OMLetPatternBackward()
     if s:search('fun\>\s*\%#')
-      return s:indent()+s:i
+      return s:indent()+b:i
     elseif search('\%#|')
-      return s:indent(1)+2+s:i
+      return s:indent(1)+2+b:i
     else
       " First pattern can have no |
-      return s:indent()+s:i
+      return s:indent()+b:i
     endif
   endif
 
   " WHILE/DO
   if s:search('\<do\>\_s*\%#')
     call s:searchpair('\%(\<while\>\|\<for\>\)','','\<do\>','bW')
-    return s:indent()+s:i
+    return s:indent()+b:i
   endif
 
   " LET
   if s:search('\<in\>\_s*\%#')
     call s:searchpair('\<let\>','','\<in\>','bW')
-    return s:indent()+s:i_let
+    return s:indent()+b:i_let
   endif
 
   " }}}
@@ -621,7 +660,7 @@ function GetOMLetIndent(l)
 
   if s:search(';;\_s*\%#')
     if OMLetBegendBackward()
-      return s:indent()+s:i_struct
+      return s:indent()+b:i_struct
     else
       return 0
     endif
@@ -636,6 +675,9 @@ function GetOMLetIndent(l)
     " > let x = bla ;
     " > bla
     call OMLetBlockBackward(';',0)
+    while s:search(';\s*\%#')
+      call OMLetBlockBackward(';',0)
+    endwhile
     return col(".")-1
   endif
 
@@ -649,7 +691,7 @@ function GetOMLetIndent(l)
   if OMLetAtomBackward()
     " I think s:indent() is ugly here...
     call OMLetABackward()
-    return col('.')-1+s:i
+    return col('.')-1+b:i
   else
     return 0
   endif

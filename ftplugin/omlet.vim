@@ -4,8 +4,9 @@
 "              Markus Mottl        <markus.mottl@gmail.com>
 "              Stefano Zacchiroli  <zack@bononia.it>
 " URL:         http://www.ocaml.info/vim/ftplugin/ocaml.vim
-" Last Change: 2005 March 10
+" Last Change: 2005 March 25
 " Changelog:
+"         0.12 - Modeline support
 "              - Folding now works also when indent_struct != 2
 "              - Changed folding customization variable, default is off
 "              - Made folding settings local to the buffer
@@ -34,9 +35,9 @@
 " Folding is activated if ocaml_folding is set
 " Do these settings once per buffer
 
-if exists("b:did_ftplugin")
-  finish
-endif
+" if exists("b:did_ftplugin")
+"   finish
+" endif
 let b:did_ftplugin=1
 
 " Error handling -- helps moving where the compiler wants you to go
@@ -102,21 +103,45 @@ endif
 
 " Folding support
 
+" Get the modeline because folding depends on indentation
+let s:s = line2byte(line('.'))+col('.')-1
+if search('^\s*(\*:o\?caml:')
+  let s:modeline = getline(".")
+else
+  let s:modeline = ""
+endif
+if s:s > 0
+  exe 'goto' s:s
+endif
+
+" Get the indentation params
+let s:m = matchstr(s:modeline,'default\s*=\s*\d\+')
+if s:m != ""
+  let s:idef = matchstr(s:m,'\d\+')
+elseif exists("g:omlet_indent")
+  let s:idef = g:omlet_indent
+else
+  let s:idef = 2
+endif
+let s:m = matchstr(s:modeline,'struct\s*=\s*\d\+')
+if s:m != ""
+  let s:i = matchstr(s:m,'\d\+')
+elseif exists("g:omlet_indent_struct")
+  let s:i = g:omlet_indent_struct
+else
+  let s:i = s:idef
+endif
+
+" Set the folding method
 if exists("g:ocaml_folding")
   setlocal foldmethod=expr
   setlocal foldexpr=OMLetFoldLevel(v:lnum)
 endif
 
+" - Only definitions below, executed once -------------------------------------
+
 if exists("*OMLetFoldLevel")
   finish
-endif
-
-if exists("g:omlet_indent_struct")
-  let s:i = g:omlet_indent_struct
-elseif exists("g:omlet_indent")
-  let s:i = g:omlet_indent
-else
-  let s:i = 2
 endif
 
 function s:topindent(lnum)
@@ -366,7 +391,7 @@ def parseOCamlAnnot():
 
 EOF
 
-fun OCamlPrintType(current_mode)
+fun! OCamlPrintType(current_mode)
   if (a:current_mode == "visual")
     python printOCamlType("visual")
   else
@@ -374,7 +399,7 @@ fun OCamlPrintType(current_mode)
   endif
 endfun
 
-fun OCamlParseAnnot()
+fun! OCamlParseAnnot()
   python parseOCamlAnnot()
 endfun
 
