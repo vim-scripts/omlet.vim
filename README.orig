@@ -13,8 +13,8 @@ Customization
 You can set up a few variables in your vimrc in order to customize omlet's 
 behavior. More will be coming...
 
-Disable folding
-> let no_ocaml_folding = 1
+Enables folding:
+> let ocaml_folding = 1
 
 Don't set key bindings (any of the following is sufficient)
 > let no_plugin_maps = 1

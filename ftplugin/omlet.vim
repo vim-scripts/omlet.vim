@@ -4,8 +4,11 @@
 "              Markus Mottl        <markus@oefai.at>
 "              Stefano Zacchiroli  <zack@bononia.it>
 "
-" Last Change: 2005 Feb 09
-" Changelog:   - Made folding settings local to the buffer
+" Last Change: 2005 March 10
+" Changelog:
+"              - Folding now works also when indent_struct != 2
+"              - Changed folding customization variable, default is off
+"              - Made folding settings local to the buffer
 "              - Included the official ftplugin ocaml.vim, except
 "                annotations stuff, and parenthesis around assert false
 "                abbreviation
@@ -99,13 +102,21 @@ if !exists("g:did_ocaml_switch")
 endif
 
 " Folding is activated if ocaml_folding is set
-if !exists("no_ocaml_folding")
+if exists("g:ocaml_folding")
   setlocal foldmethod=expr
   setlocal foldexpr=OMLetFoldLevel(v:lnum)
 endif
 
 if exists("*OMLetFoldLevel")
   finish
+endif
+
+if exists("g:omlet_indent_struct")
+  let s:i = g:omlet_indent_struct
+elseif exists("g:omlet_indent")
+  let s:i = g:omlet_indent
+else
+  let s:i = 2
 endif
 
 function s:topindent(lnum)
@@ -116,7 +127,7 @@ function s:topindent(lnum)
     endif
     let l = l-1
   endwhile
-  return -2
+  return -s:i
 endfunction
 
 function OMLetFoldLevel(l)
@@ -128,23 +139,23 @@ function OMLetFoldLevel(l)
 
   " We start folds for modules, classes, and every toplevel definition
   if getline(a:l) =~ '^\s*\%(\<val\>\|\<module\>\|\<class\>\|\<type\>\|\<method\>\|\<initializer\>\|\<inherit\>\|\<exception\>\|\<external\>\)'
-    exe 'return ">' (indent(a:l)/2)+1 '"'
+    exe 'return ">' (indent(a:l)/s:i)+1 '"'
   endif
 
   " Toplevel let are detected thanks to the indentation
-  if getline(a:l) =~ '^\s*let\>' && indent(a:l) == 2+s:topindent(a:l)
-    exe 'return ">' (indent(a:l)/2)+1 '"'
+  if getline(a:l) =~ '^\s*let\>' && indent(a:l) == s:i+s:topindent(a:l)
+    exe 'return ">' (indent(a:l)/s:i)+1 '"'
   endif
 
   " We close fold on end which are associated to struct, sig or object.
   " We use syntax information to do that.
   if getline(a:l) =~ '^\s*end\>' && synIDattr(synID(a:l, indent(a:l)+1, 0), "name") != "ocamlKeyword"
-    return (indent(a:l)/2)+1
+    return (indent(a:l)/s:i)+1
   endif
 
   " Folds end on ;;
   if getline(a:l) =~ '^\s*;;'
-    exe 'return "<' (indent(a:l)/2)+1 '"'
+    exe 'return "<' (indent(a:l)/s:i)+1 '"'
   endif
 
   " Comments around folds aren't merged to them.

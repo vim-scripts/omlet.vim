@@ -1,9 +1,12 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Mar 01
+" URL:         http://perso.ens-lyon.fr/david.baelde/productions/omlet.php
+" Last Change: 2005 Mar 10
 " Changelog:
-"              - ExprBackward isn't bothered anymore by comments at the 
+"              - Simplified and corrected some issues with pattern operators
+"              - Improved indentation inside comments
+"              - ExprBackward isn't bothered anymore by comments at the
 "                beginning of an expr
 "              - Support for builtin "^"
 "              - Much more customization
@@ -45,8 +48,6 @@
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 " TODO cannot re-indent when || is typed at begining of line
-" TODO indentation is still strict for fun/arg and sequence
-"      flexibility causes problems with patterns
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent")
@@ -59,7 +60,7 @@ setlocal comments=s1l:(*,mb:*,ex:*)
 setlocal fo=croq
 syntax enable
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),o],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^
+setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),o],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*
 
 " Do not define our functions twice
 if exists("*GetOMLetIndent")
@@ -310,14 +311,13 @@ function GetOMLetIndent(l)
   exe a:l
 
   " Indentation inside comments -- needs the comment to be closed!
-  " TODO something weird is happening when inserting \n before ending *)
-  if synIDattr(synID(line("."), col("."), 0), "name") =~? 'comment'
+  if synIDattr(synID(line("."), col("."), 0), "name") == 'ocamlComment'
     let s = s:save()
     " TODO The next analysis should avoid strings
     call searchpair('(\*','','\*)','bW')
     if s != s:save()
       " We were strictly inside the comment, and we are now at its beginning
-      call search('\*[^\*]')
+      call search('\*\_[^\*]')
       return col('.')-1
     endif
     " No need to restore, there was no move
@@ -373,10 +373,14 @@ function GetOMLetIndent(l)
     return s:indent()
   endif
 
+  " Builtin infix operators: "&&", "||", "^", ...
+  if getline(a:l) =~ '^\s*\%(||\|&&\|\^\)'
+    call OMLetExprBackward('',0)
+    return s:indent()
+  endif
+
   " PATTERNS
 
-  " I want 'with' to be stricly aligned on 'match'
-  " since I align patterns on 'match'
   if getline(a:l) =~ '^\s*with\>'
     call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
     return s:indent()
@@ -384,7 +388,27 @@ function GetOMLetIndent(l)
 
   if getline(a:l) =~ '^\s*->'
     call OMLetPatternBackward()
-    return s:indent()+s:i
+    if search('\%#|')
+      return s:indent()+2
+    else
+      return s:indent()
+    endif
+  endif
+
+  if getline(a:l) =~ '^\s*|'
+    call OMLetBlockBackward('match',0)
+    if s:search('|\_s*\%#')
+      " We are stuck on a 0-ary constructor
+      return s:indent(1)
+    elseif s:search('\[\_s*\%#')
+      " Polymorphic variant
+      return col(".")-1
+    elseif s:search('function\_s*\%#')
+      return s:indent()+s:i_function
+    else
+      call OMLetMatchHeadBackward()
+      return s:indent()+s:i_match
+    endif
   endif
 
   " IF/THEN/ELSE
@@ -474,29 +498,6 @@ function GetOMLetIndent(l)
     return s:indent()
   endif
 
-  " &&, ||, and co.
-  if getline(a:l) =~ '^\s*\%(||\|&&\|\^\)'
-    call OMLetExprBackward('',0)
-    return s:indent()
-  endif
-
-  " Matching clause marker |
-  if getline(a:l) =~ '^\s*|'
-    call OMLetBlockBackward('match',0)
-    if s:search('|\_s*\%#')
-      " We are stuck on a 0-ary constructor
-      return s:indent(1)
-    elseif s:search('\[\_s*\%#')
-      " Polymorphic variant
-      return col(".")-1
-    elseif s:search('function\_s*\%#')
-      return s:indent()+s:i_function
-    else
-      call OMLetMatchHeadBackward()
-      return s:indent()+s:i_match
-    endif
-  endif
-
   " }}}
 
   " {{{ Beginning of blocks
@@ -547,18 +548,22 @@ function GetOMLetIndent(l)
   " MATCH
   if s:search('\<when\_s*\%#')
     call OMLetPatternBackward()
-    return s:indent()+s:i
+    if search('\%#|')
+      return s:indent()+2+s:i
+    else
+      " First pattern can have no |
+      return s:indent()+s:i
+    endif
   endif
   if s:search('->\_s*\%#')
     call OMLetPatternBackward()
-    call OMLetBlockBackward('match',0)
-    call OMLetMatchHeadBackward()
-    if search('\%#fun\>')
+    if s:search('fun\>\s*\%#')
       return s:indent()+s:i
-    elseif search('\%#function\>')
-      return s:indent()+2+s:i+s:i_function
+    elseif search('\%#|')
+      return s:indent()+2+s:i
     else
-      return s:indent()+2+s:i+s:i_match
+      " First pattern can have no |
+      return s:indent()+s:i
     endif
   endif
 
@@ -587,7 +592,13 @@ function GetOMLetIndent(l)
   endif
 
   if s:search('\%(;\|,\|\^\|||\|&&\)\_s*\%#')
-    " TODO here I could be a bit more flexible...
+    " Flexible indentation using s:indent() would be nice,
+    " but I would actually need to return the identation
+    " that *would have had* the previous expr in the sequence
+    " if it has been alone on a line.
+    " s/col(".")-1/s:indent()/ leads to bad things like:
+    " let x = bla ;
+    " bla
     call OMLetExprBackward('',0)
     return col(".")-1
   endif
@@ -595,7 +606,7 @@ function GetOMLetIndent(l)
   " Application: indentation between a function and its arguments
 
   if OMLetAtomBackward()
-    " TODO flexible indentation
+    " I think s:indent() is ugly here...
     call OMLetAtomsBackward()
     return col('.')-1+s:i
   else
