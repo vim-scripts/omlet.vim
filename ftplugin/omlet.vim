@@ -22,11 +22,11 @@
 if exists("*OMLetFoldLevel")
   finish
 endif
-  
+
 function s:topindent(lnum)
   let l = a:lnum
   while l > 0
-    if getline(l) =~ /\s*\%(\<struct\>\|\<sig\>\|\<object\>\)/
+    if getline(l) =~ '\s*\%(\<struct\>\|\<sig\>\|\<object\>\)'
       return indent(l)
     endif
     let l = l-1
@@ -47,7 +47,7 @@ function OMLetFoldLevel(l)
   endif
 
   " Toplevel let are detected thanks to the indentation
-  if getline(a:l) =~ '^\s*let\>' && 2*indent(a:l) == s:topindent(a:l-1)
+  if getline(a:l) =~ '^\s*let\>' && indent(a:l) == 2+s:topindent(a:l)
     exe 'return ">' (indent(a:l)/2)+1 '"'
   endif
 
