@@ -1,8 +1,12 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Feb 05
-" Changelog:   - Corrected a bug related with garbage-eating operators
+" Last Change: 2005 Feb 08
+" Changelog:   - Syntax highlighting is turned on, cause I rely on synIDs
+"              - Indentation of ;; and correction of a bug related to
+"                variables names beginning with let -- thanks to micha !
+"              - Toplevel let definitions after end of modules/classes
+"              - Corrected a bug related with garbage-eating operators
 "                (let-in does that, if-then doesn't)
 "              - Better mangement of && || and ,
 "              - Basic jumping now goes threw ::, @, <- ... and correctly
@@ -38,9 +42,14 @@ if exists("b:did_indent") || exists("*GetOMLetIndent")
 endif
 let b:did_indent = 1
 
+" TODO I won't be able to remove expandtab, until I can remove every
+" indentation based on col()
+" TODO make many things customizable, starting with a shiftwidth skip
+" instead of two spaces
 setlocal expandtab
 setlocal comments=s1l:(*,mb:*,ex:*)
 setlocal fo=croq
+syntax enable
 
 " {{{ A few utils
 
@@ -232,7 +241,7 @@ endfunction
 " assuming that the previous lines are well indented.
 
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys=0{,0},!^F,o,O,0=let,0=and,0=in,0=end,0),0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&
+setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&
 " TODO cannot indent when || is typed at begining of line
 
 let s:mode_relative = 0
@@ -347,9 +356,30 @@ function GetOMLetIndent(l)
     endif
   endif
 
-  if getline(a:l) =~ '^\s*let\>' && (s:search('\<struct\>\_s*\%#') || OMLetAtomBackward() || search(';;\_s*\%#'))
-    if s:searchpair(s:begend,'','\<end\>','bW')
-      return s:indent('.')+2
+  if getline(a:l) =~ '^\s*;;'
+    if OMLetBegendBackward()
+      return col('.')+1
+    else
+      return 0
+    endif
+  endif
+
+  " The next three tests are for indenting toplevel defs using let
+
+  if getline(a:l) =~ '^\s*let\>' && s:search('\<end\>\_s*\%#') && synIDattr(synID(line('.'),col('.'),0),'name') != 'ocamlKeyword'
+    call OMLetBegendBackward()
+    return col('.')-1
+  else
+    exe a:l
+  endif
+
+  if getline(a:l) =~ '^\s*let\>' && s:search('\<struct\>\_s*\%#')
+    return col('.')+1
+  endif
+    
+  if getline(a:l) =~ '^\s*let\>' && (OMLetAtomBackward() || search(';;\_s*\%#'))
+    if OMLetBegendBackward()
+      return col('.')+1
     else
       return 0
     endif
@@ -366,7 +396,8 @@ function GetOMLetIndent(l)
     endif
   endif
 
-  " Some users may not like that.
+  " let after let isn't indented more
+
   if getline(a:l) =~ '^\s*\<let\>' && s:search('\<in\>\_s*\%#')
     call s:searchpair('\<let\>','','\<in\>','bW')
     return s:indent(".")

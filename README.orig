@@ -14,8 +14,16 @@ OMLet includes:
 If you've been using emacs for a while, you might be a <tab> addict.
 Adding the following line to your .vimrc will make <tab> run indentation
 when hit in insert mode (C-f is the default for that in vim):
-autocmd FileType omlet set indentkeys+=!^I
+autocmd FileType omlet set indentkeys+=,!^I
 
 If you like to check type annotations, try my script at:
 http://www.vim.org/scripts/script.php?script_id=1197
+
+Omlet indents with spaces, so if you want a full compatibility with emacs's
+tuareg-mode, it is recommended to use space-only indentation with emacs:
+(setq-default indent-tabs-mode nil)
+
+Please make sure that the following line is in your ~/.vimrc, otherwise
+indentation won't be loaded automatically:
+filetype plugin indent on
 
