@@ -1,0 +1,6 @@
+
+To install omlet, run "make install".
+It will put the files in your home directory, and won't overwrite
+anything but omlet.vim files, creating and filling filetype.vim only if it
+does not exist.
+

@@ -1,0 +1,5 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=1196
+
+OMLet provides a much better indentation for Caml/OCaml files than the official one. It mostly behaves as tuareg-mode for emacs does. Omlet supports most of the language features, including objects. I believe that the result is already very convincing, check at (http://perso.ens-lyon.fr/david.baelde/productions/omlet.php). You are no more forced to switch to emacs for editing OCaml! And omlet also provides nice folding...
+
+OMLet is nearly stable, and will then be included as official OCaml indentation file in VIm. For now, it is available in the Debian package ocaml-tools.

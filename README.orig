@@ -1,0 +1,11 @@
+
+omlet.vim -- filetype OCaml for VIm
+Copyright (c) 2005 David Baelde
+
+OMLet includes:
+ - A slightly modified syntax file;
+ - A much better indentation, which aims at becoming as good as Tuareg;
+ - A plugin which performs folding -- I like it a lot, but if you don't want
+   it you can simply turn it using the following command in your ~/.vimrc:
+    autocmd FileType omlet set foldmethod=manual
+
