@@ -1,8 +1,12 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Feb 21
-" Changelog:   - Much more customization
+" Last Change: 2005 Mar 01
+" Changelog:
+"              - ExprBackward isn't bothered anymore by comments at the 
+"                beginning of an expr
+"              - Support for builtin "^"
+"              - Much more customization
 "              - (Almost) fully flexible indentation (not "strict" anymore)
 "              - Major bug with sum types definition was corrected, and
 "                polymorphic variants support added, -- thanks Zack !
@@ -55,7 +59,7 @@ setlocal comments=s1l:(*,mb:*,ex:*)
 setlocal fo=croq
 syntax enable
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&
+setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),o],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^
 
 " Do not define our functions twice
 if exists("*GetOMLetIndent")
@@ -230,6 +234,11 @@ function OMLetExprBackward(lf,gbg)
   elseif OMLetAtomBackward()
     call OMLetAtomsBackward()
     call OMLetExprBackward(a:lf,a:gbg)
+    while searchpair('(\*','','\*)')
+      " Go to the real end of comment, then to the next meaningful point
+      call search(')')
+      call search('\w')
+    endwhile
     return 1
 
   else
@@ -240,7 +249,7 @@ endfunction
 " Now we include let and match...
 " BlockBackward return 1 iff it succeeds in moving backward
 " that's not a very strong specification :-/
-function OMLetBlockBackward(lf,gbg,...)
+function OMLetBlockBackward(lf,gbg)
   if OMLetExprBackward(a:lf,a:gbg) " Doesn't move the point on failure
     call OMLetBlockBackward(a:lf,a:gbg)
     return 1
@@ -260,9 +269,6 @@ function OMLetBlockBackward(lf,gbg,...)
 
   elseif search('\%(->\|\<of\>\)\_s*\%#','bW')
     call OMLetPatternBackward()
-    if a:0 " the lazy hack
-      return 1
-    endif
     call OMLetBlockBackward('match',0)
     if a:lf != 'match'
       call OMLetMatchHeadBackward()
@@ -284,13 +290,15 @@ endfunction
 " {{{ Indentation function
 " The goal is to return a 'correct' indentation,
 " assuming that the previous lines are well indented.
+" The optionnal argument avoids ignoring leading "| "
 
-function s:indent()
+function s:indent(...)
   if search('[(\[{].*\%#','bW')
     call search('\S')
     return col('.')-1
-  elseif getline('.') =~ '^\s*|'
-    return indent('.')+2
+  elseif a:0 && search('^\s*|.*\%#','bW')
+    call search('\S')
+    return col('.')-1
   else
     return indent('.')
   endif
@@ -466,21 +474,21 @@ function GetOMLetIndent(l)
     return s:indent()
   endif
 
-  " && and ||
-  if getline(a:l) =~ '^\s*\%(||\|&&\)'
+  " &&, ||, and co.
+  if getline(a:l) =~ '^\s*\%(||\|&&\|\^\)'
     call OMLetExprBackward('',0)
     return s:indent()
   endif
 
   " Matching clause marker |
   if getline(a:l) =~ '^\s*|'
-    call OMLetBlockBackward('match',0,1)
+    call OMLetBlockBackward('match',0)
     if s:search('|\_s*\%#')
       " We are stuck on a 0-ary constructor
-      return s:indent()
+      return s:indent(1)
     elseif s:search('\[\_s*\%#')
       " Polymorphic variant
-      return s:indent()
+      return col(".")-1
     elseif s:search('function\_s*\%#')
       return s:indent()+s:i_function
     else
@@ -543,7 +551,7 @@ function GetOMLetIndent(l)
   endif
   if s:search('->\_s*\%#')
     call OMLetPatternBackward()
-    call OMLetBlockBackward('match',0,1)
+    call OMLetBlockBackward('match',0)
     call OMLetMatchHeadBackward()
     if search('\%#fun\>')
       return s:indent()+s:i
@@ -578,7 +586,7 @@ function GetOMLetIndent(l)
     endif
   endif
 
-  if s:search('\%(;\|,\|||\|&&\)\_s*\%#')
+  if s:search('\%(;\|,\|\^\|||\|&&\)\_s*\%#')
     " TODO here I could be a bit more flexible...
     call OMLetExprBackward('',0)
     return col(".")-1
