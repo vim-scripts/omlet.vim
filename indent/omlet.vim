@@ -1,9 +1,12 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" URL:         http://perso.ens-lyon.fr/david.baelde/productions/omlet.php
+" URL:         http://ocaml.info/vim/indent/omlet.vim
 " Last Change: 2005 Mar 10
 " Changelog:
+"              - s:indent() needed more strictness with parenthesis..
+"              - Enhanced AtomBackward ("!" was not skipped)
+"              - Indentation on a newline after while/for was not working!
 "              - Simplified and corrected some issues with pattern operators
 "              - Improved indentation inside comments
 "              - ExprBackward isn't bothered anymore by comments at the
@@ -157,7 +160,7 @@ function OMLetAtomBackward()
       call s:restore(s)
     endif
 
-  elseif search('\%(::\|`\|\.\|<-\|:=\|@\)\_s*\%#','bW')
+  elseif search('\%(::\|!\|`\|\.\|<-\|:=\|@\)\_s*\%#','bW')
     return OMLetAtomBackward()
 
   elseif search('=\_s*\%#','bW')
@@ -294,7 +297,8 @@ endfunction
 " The optionnal argument avoids ignoring leading "| "
 
 function s:indent(...)
-  if search('[(\[{].*\%#','bW')
+  " TODO well parenthized stuff... [(\[{]\s*\%# is not satisfying either
+  if search('[(\[{][^)\]}]*\%#','bW')
     call search('\S')
     return col('.')-1
   elseif a:0 && search('^\s*|.*\%#','bW')
@@ -438,7 +442,7 @@ function GetOMLetIndent(l)
   " { and [ may need to be reindented in type definitions, where they don't
   " really deserve the default +4 indentation
   " if getline(a:l) =~ '^\s*{'
-  "   return s:indent(a:l-1)+2 " TODO that's weak !
+  "   return s:indent(a:l-1)+2 " But that's weak !
   " endif
 
   " Easy toplevel definitions
@@ -507,7 +511,7 @@ function GetOMLetIndent(l)
   if s:search('\(\<struct\>\|\<sig\>\|\<class\>\)\_s*\%#')
     return s:indent()+s:i_struct
   endif
-  if s:search('\(\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
+  if s:search('\(\<while\>\|\<for\>\|\<if\>\|\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
     return s:indent()+s:i
   endif
   if s:search('\%(\<let\>\|\<and\>\|\<module\>\|\<val\>\|\<method\>\)\_[^=]\+=\_s*\%#')
@@ -532,9 +536,6 @@ function GetOMLetIndent(l)
   " Sometimes you increment according to a master keyword
 
   " IF
-  if s:search('\<if\>\_s*\%#')
-    return s:indent()+s:i
-  endif
   if s:search('\<then\>\_s*\%#')
     call s:searchpair('\<if\>','','\<then\>','bW')
     return s:indent()+s:i

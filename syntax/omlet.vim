@@ -1,15 +1,18 @@
 " Vim syntax file
 " Language:     OCaml
 " Filenames:    *.ml *.mli *.mll *.mly
-" Maintainers:  Markus Mottl      <markus@oefai.at>
+" Maintainers:  Markus Mottl      <markus.mottl@gmail.com>
 "               Karl-Heinz Sylla  <Karl-Heinz.Sylla@gmd.de>
 "               Issac Trotts      <ijtrotts@ucdavis.edu>
-" URL:          http://www.oefai.at/~markus/vim/syntax/ocaml.vim
-" Last Change:  2004 Jul 26
-"               2003 Jan 19 - Added keyword "require" for scripting (MM)
-"               2002 Oct 30 - New variable "ocaml_revised" (MM)
-" Patch:        2005 Jan 31 - Made object/end syntacticaly different
-"                             (David Baelde <firstname.name@ens-lyon.org>)
+" URL:          http://www.ocaml.info/vim/syntax/ocaml.vim
+" Last Change:  2004 Aug 13 - Added new type keywords (MM)
+"               2004 Jul 30 - Added script keyword "thread" (MM)
+"               2004 May 15 - Added keyword "format4" (MM)
+"               2003 Jan 19 - Added script keyword "require" (MM)
+
+" A minor patch was applied to the official version so that object/end
+" can be distinguished from begin/end, which is used for indentation,
+" and folding. (David Baelde)
 
 " For version 5.x: Clear all syntax items
 " For version 6.x: Quit when a syntax file was already loaded
@@ -26,7 +29,7 @@ syn case match
 syn match    ocamlComment   "^#!.*"
 
 " Scripting directives
-syn match    ocamlScript "^#\<\(quit\|labels\|warnings\|directory\|cd\|load\|use\|install_printer\|remove_printer\|require\|trace\|untrace\|untrace_all\|print_depth\|print_length\)\>"
+syn match    ocamlScript "^#\<\(quit\|labels\|warnings\|directory\|cd\|load\|use\|install_printer\|remove_printer\|require\|thread\|trace\|untrace\|untrace_all\|print_depth\|print_length\)\>"
 
 " lowercase identifier - the standard way to match
 syn match    ocamlLCIdentifier /\<\(\l\|_\)\(\w\|'\)*\>/
@@ -165,8 +168,9 @@ else
   syn match    ocamlKeyChar  "!"
 endif
 
-syn keyword  ocamlType     array bool char exn float format format4 int
-syn keyword  ocamlType     list option string unit
+syn keyword  ocamlType     array bool char exn float format format4
+syn keyword  ocamlType     int int32 int64 lazy_t list nativeint option
+syn keyword  ocamlType     string unit
 
 syn keyword  ocamlOperator asr lor lsl lsr lxor mod not
 
@@ -205,20 +209,20 @@ syn match    ocamlKeyChar      "\*"
 syn match    ocamlKeyChar      "="
 
 if exists("ocaml_revised")
-  syn match    ocamlErr		"<-"
+  syn match    ocamlErr        "<-"
 else
-  syn match    ocamlOperator	"<-"
+  syn match    ocamlOperator   "<-"
 endif
 
-syn match    ocamlNumber	"\<-\=\d\+\>"
-syn match    ocamlNumber	"\<-\=0[x|X]\x\+\>"
-syn match    ocamlNumber	"\<-\=0[o|O]\o\+\>"
-syn match    ocamlNumber	"\<-\=0[b|B][01]\+\>"
-syn match    ocamlFloat		"\<-\=\d\+\.\d*\([eE][-+]\=\d\+\)\=[fl]\=\>"
+syn match    ocamlNumber        "\<-\=\d\+\>"
+syn match    ocamlNumber        "\<-\=0[x|X]\x\+\>"
+syn match    ocamlNumber        "\<-\=0[o|O]\o\+\>"
+syn match    ocamlNumber        "\<-\=0[b|B][01]\+\>"
+syn match    ocamlFloat         "\<-\=\d\+\.\d*\([eE][-+]\=\d\+\)\=[fl]\=\>"
 
 " Labels
-syn match    ocamlLabel		"\~\(\l\|_\)\(\w\|'\)*"lc=1
-syn match    ocamlLabel		"?\(\l\|_\)\(\w\|'\)*"lc=1
+syn match    ocamlLabel        "\~\(\l\|_\)\(\w\|'\)*"lc=1
+syn match    ocamlLabel        "?\(\l\|_\)\(\w\|'\)*"lc=1
 syn region   ocamlLabel transparent matchgroup=ocamlLabel start="?(\(\l\|_\)\(\w\|'\)*"lc=2 end=")"me=e-1 contains=ALLBUT,@ocamlContained,ocamlParenErr
 
 
@@ -254,63 +258,63 @@ if version >= 508 || !exists("did_ocaml_syntax_inits")
     command -nargs=+ HiLink hi def link <args>
   endif
 
-  HiLink ocamlBraceErr	   Error
-  HiLink ocamlBrackErr	   Error
-  HiLink ocamlParenErr	   Error
-  HiLink ocamlArrErr	   Error
+  HiLink ocamlBraceErr     Error
+  HiLink ocamlBrackErr     Error
+  HiLink ocamlParenErr     Error
+  HiLink ocamlArrErr       Error
 
   HiLink ocamlCommentErr   Error
 
-  HiLink ocamlCountErr	   Error
-  HiLink ocamlDoErr	   Error
-  HiLink ocamlDoneErr	   Error
-  HiLink ocamlEndErr	   Error
-  HiLink ocamlThenErr	   Error
+  HiLink ocamlCountErr     Error
+  HiLink ocamlDoErr        Error
+  HiLink ocamlDoneErr      Error
+  HiLink ocamlEndErr       Error
+  HiLink ocamlThenErr      Error
 
-  HiLink ocamlCharErr	   Error
+  HiLink ocamlCharErr      Error
 
-  HiLink ocamlErr	   Error
+  HiLink ocamlErr          Error
 
-  HiLink ocamlComment	   Comment
+  HiLink ocamlComment      Comment
 
-  HiLink ocamlModPath	   Include
-  HiLink ocamlModule	   Include
+  HiLink ocamlModPath      Include
   HiLink ocamlObject	   Include
+  HiLink ocamlModule       Include
   HiLink ocamlModParam1    Include
-  HiLink ocamlModType	   Include
-  HiLink ocamlMPRestr3	   Include
-  HiLink ocamlFullMod	   Include
+  HiLink ocamlModType      Include
+  HiLink ocamlMPRestr3     Include
+  HiLink ocamlFullMod      Include
   HiLink ocamlModTypeRestr Include
-  HiLink ocamlWith	   Include
-  HiLink ocamlMTDef	   Include
+  HiLink ocamlWith         Include
+  HiLink ocamlMTDef        Include
 
-  HiLink ocamlScript	   Include
+  HiLink ocamlScript       Include
 
   HiLink ocamlConstructor  Constant
 
   HiLink ocamlModPreRHS    Keyword
-  HiLink ocamlMPRestr2	   Keyword
-  HiLink ocamlKeyword	   Keyword
-  HiLink ocamlFunDef	   Keyword
+  HiLink ocamlMPRestr2     Keyword
+  HiLink ocamlKeyword      Keyword
+  HiLink ocamlFunDef       Keyword
   HiLink ocamlRefAssign    Keyword
-  HiLink ocamlKeyChar	   Keyword
-  HiLink ocamlAnyVar	   Keyword
-  HiLink ocamlTopStop	   Keyword
-  HiLink ocamlOperator	   Keyword
+  HiLink ocamlKeyChar      Keyword
+  HiLink ocamlAnyVar       Keyword
+  HiLink ocamlTopStop      Keyword
+  HiLink ocamlOperator     Keyword
 
-  HiLink ocamlBoolean	   Boolean
+  HiLink ocamlBoolean      Boolean
   HiLink ocamlCharacter    Character
-  HiLink ocamlNumber	   Number
-  HiLink ocamlFloat	   Float
-  HiLink ocamlString	   String
+  HiLink ocamlNumber       Number
+  HiLink ocamlFloat        Float
+  HiLink ocamlString       String
 
-  HiLink ocamlLabel	   Identifier
+  HiLink ocamlLabel        Identifier
 
-  HiLink ocamlType	   Type
+  HiLink ocamlType         Type
 
-  HiLink ocamlTodo	   Todo
+  HiLink ocamlTodo         Todo
 
-  HiLink ocamlEncl	   Keyword
+  HiLink ocamlEncl         Keyword
 
   delcommand HiLink
 endif
