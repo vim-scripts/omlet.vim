@@ -1,6 +1,6 @@
 .PHONY: install dist
 
-VERSION=0.10
+VERSION=0.11
 
 install:
 	BASE=$(HOME)/.vim make install-aux

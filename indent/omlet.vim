@@ -4,6 +4,10 @@
 " URL:         http://ocaml.info/vim/indent/omlet.vim
 " Last Change: 2005 Mar 10
 " Changelog:
+"              - Enhanced a lot the expression backward parsing, including
+"                many infix operators, which are now well considered regarding
+"                their binding power
+"              - s:indent() was enhanced a lot
 "              - s:indent() needed more strictness with parenthesis..
 "              - Enhanced AtomBackward ("!" was not skipped)
 "              - Indentation on a newline after while/for was not working!
@@ -51,6 +55,9 @@
 " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 " TODO cannot re-indent when || is typed at begining of line
+" TODO see what I can do for:
+" bla ; bla ;
+"       bla ;
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent")
@@ -63,7 +70,7 @@ setlocal comments=s1l:(*,mb:*,ex:*)
 setlocal fo=croq
 syntax enable
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),o],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*
+setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*,0\,,0=::,0@,0+,0/,0-
 
 " Do not define our functions twice
 if exists("*GetOMLetIndent")
@@ -102,10 +109,15 @@ endfunction
 
 " Same as search(_,'bW') but skips comments
 function s:search(re)
+  let p = s:save()
   while search('\*)\_s*\%#','bW')
     call searchpair('(\*','','\*)','bW')
   endwhile
-  return search(a:re,'bW')
+  if search(a:re,'bW')
+    return 1
+  else
+    call s:restore(p)
+  endif
 endfunction
 
 " Goes back to the beginning of an "end", whatever its opening keyword is
@@ -116,12 +128,24 @@ endfunction
 
 " }}}
 
-" {{{ Basic jumping
+" {{{ Jumping
+" We separated expressions in three classes:
+"  A: The applications
+"  E: A + closure by infix operators which bind tighter than ";"
+"        We ignore the aggregating "let" and the special "then" operator
+"  Block: Full expressions, it's a mess...
+" "then", "match", "patterns"...
+
 " Goes to the beginning of the previous (exclusive) block.
 " It is stopped by any non-trivial syntax.
 " The block moves are really the heart of omlet!
 
 let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<fun\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
+
+let s:binop_core = '\%(,\|::\|@\|\^\|||\|&&\|\.\|#\|<-\|:=\|+\|\*\|/\|-\)'
+" Thanks to ".", floating point arith operators are included...
+" "." and "#" shouldn't really be there actually, they're managed in class A
+let s:binop = s:binop_core.'\_s*\%#'
 
 function OMLetAtomBackward()
   let s = s:save()
@@ -146,7 +170,7 @@ function OMLetAtomBackward()
         return 1
       endif
     endwhile
-    throw "didn't find beginning of string"
+    throw "Couldn't find beginning of string"
 
   elseif search('\<done\>\_s*\%#','bW')
     call s:searchpair('\<do\>','','\<done\>','bW')
@@ -160,37 +184,49 @@ function OMLetAtomBackward()
       call s:restore(s)
     endif
 
-  elseif search('\%(::\|!\|`\|\.\|<-\|:=\|@\)\_s*\%#','bW')
+  elseif search('\%(!\|`\|#\|\.\)\_s*\%#','bW')
+    " Ignore some atom prefixes
     return OMLetAtomBackward()
 
-  elseif search('=\_s*\%#','bW')
-    if search('\%(\<let\>\|\<val\>\|\<method\>\|\<type\>\)[^=]\+\%#','bW')
-      call s:restore(s)
-    else
-      return 1
-    endif
-  endif
-
-  if search(s:blockstop,'bW')
+  elseif search(s:binop,'bW') || search(s:blockstop,'bW')
     " Stop moving in front of those block delimiters
     call s:restore(s)
     return 0
 
   else
-    " Otherwise, move backward, skipping an atom
+    " Otherwise, move backward, skipping a variable name or constant...
     return search('\<','bW')
   endif
 endfunction
 
-function OMLetAtomsBackward()
+function OMLetABackward()
   while OMLetAtomBackward()
   endwhile
+endfunction
+
+function OMLetEBackward()
+  if OMLetABackward()
+    return OMLetEBackward()
+  endif
+
+  if s:search(s:binop)
+    return OMLetEBackward()
+  endif
+
+  let s = s:save()
+  if search('=\_s*\%#','bW')
+    if search('\%(\<let\>\|\<val\>\|\<method\>\|\<type\>\)[^=]\+\%#','bW')
+      return s:restore(s)
+    else
+      return OMLetEBackward()
+    endif
+  endif
 endfunction
 
 " }}}
 
 " {{{ Complex jumping
-" We still have problems with let, match, and else,
+" We still have problems with "match", and "else",
 " which have no closing keyword.
 
 function OMLetMatchHeadBackward()
@@ -216,54 +252,40 @@ function OMLetIfHeadBackward()
   endif
 endfunction
 
-function OMLetExprBackward(lf,gbg)
-  if (a:lf != 'then' || a:gbg) && search('\<then\_s*\%#','bW')
-    call s:searchpair('\<if\>','','\<then\>','bW')
-    call OMLetExprBackward(a:lf,a:gbg)
-    return 1
-
-  elseif search('\<else\_s*\%#','bW')
-    call OMLetBlockBackward('then',0)
+function OMLetBlockBackward(lf,gbg)
+  if search('\<else\_s*\%#','bW')
+    call OMLetBlockBackward('then',a:gbg)
     call OMLetIfHeadBackward()
-    call OMLetExprBackward(a:lf,a:gbg)
+    call OMLetBlockBackward(a:lf,a:gbg)
     return 1
 
-  " These operators have priority on ';' so we must skip them.
-  " However, it is a bad programming style to use them at toplevel
-  " in a sequence: ignore should be around.
-  elseif search('\%(||\|&&\)\_s*\%#','bW')
-    call OMLetExprBackward(a:lf,a:gbg)
-    return 1
-
-  elseif OMLetAtomBackward()
-    call OMLetAtomsBackward()
-    call OMLetExprBackward(a:lf,a:gbg)
+  elseif OMLetEBackward()
+    call OMLetBlockBackward(a:lf,a:gbg)
     while searchpair('(\*','','\*)')
+      " Undo some abusive comment jumping...
       " Go to the real end of comment, then to the next meaningful point
       call search(')')
       call search('\w')
     endwhile
     return 1
 
-  else
+  elseif a:lf == 'then'
     return 0
-  endif
-endfunction
 
-" Now we include let and match...
-" BlockBackward return 1 iff it succeeds in moving backward
-" that's not a very strong specification :-/
-function OMLetBlockBackward(lf,gbg)
-  if OMLetExprBackward(a:lf,a:gbg) " Doesn't move the point on failure
+  elseif search('\<then\_s*\%#','bW')
+    call s:searchpair('\<if\>','','\<then\>','bW')
     call OMLetBlockBackward(a:lf,a:gbg)
     return 1
+
+  elseif a:lf == ';'
+    return 0
 
   elseif search('\<in\>\_s*\%#','bW')
     call s:searchpair('\<let\>','','\<in\>','bW')
     call OMLetBlockBackward(a:lf, 0) " [let ... in] eats the garbage
     return 1
 
-  elseif search('[;,]\_s*\%#','bW')
+  elseif search(';\_s*\%#','bW')
     call OMLetBlockBackward(a:lf,1) " sequence is the garbage
     return 1
 
@@ -294,19 +316,29 @@ endfunction
 " {{{ Indentation function
 " The goal is to return a 'correct' indentation,
 " assuming that the previous lines are well indented.
-" The optionnal argument avoids ignoring leading "| "
 
 function s:indent(...)
-  " TODO well parenthized stuff... [(\[{]\s*\%# is not satisfying either
-  if search('[(\[{][^)\]}]*\%#','bW')
-    call search('\S')
-    return col('.')-1
-  elseif a:0 && search('^\s*|.*\%#','bW')
+  " The optionnal argument avoids ignoring leading "| "
+
+  " If there's a hard delimiter like "{","(","[", its position is
+  " used as the reference for the indentation
+  let p = s:save()
+  let l = line(".")
+  if !search('\%#[{(\[]') && s:searchpair('[\[{(]','','[)}\]]','bW') && line(".") == l
     call search('\S')
     return col('.')-1
   else
-    return indent('.')
+    call s:restore(p)
   endif
+
+  if a:0==0 && search('^\s*\%(|.*\%#\|\%#|\)','bW')
+    " We consider leading "|" as whitespace
+    call search('|')
+    call search('\S')
+    return col('.')-1
+  endif
+
+  return indent('.')
 endfunction
 
 function GetOMLetIndent(l)
@@ -314,7 +346,9 @@ function GetOMLetIndent(l)
   " Go to the first non-blank char on the line to be indented.
   exe a:l
 
-  " Indentation inside comments -- needs the comment to be closed!
+  " {{{ Comments
+
+  " Inside comments -- needs the comment to be closed!
   if synIDattr(synID(line("."), col("."), 0), "name") == 'ocamlComment'
     let s = s:save()
     " TODO The next analysis should avoid strings
@@ -328,7 +362,6 @@ function GetOMLetIndent(l)
   endif
 
   " Comments with a blank line before them are indented as the next block
-  " This can be done only when the comment is closed
   if getline(a:l) =~ '^\s*(\*' && getline(a:l-1) =~ '^\s*$'
     call searchpair('(\*','','\*)')
     let new = nextnonblank(line('.')+1)
@@ -338,6 +371,8 @@ function GetOMLetIndent(l)
       return GetOMLetIndent(new)
     endif
   endif
+
+  " }}}
 
   " {{{ Keyword alignments
   " How to indent a line starting with a keyword
@@ -377,15 +412,9 @@ function GetOMLetIndent(l)
     return s:indent()
   endif
 
-  " Builtin infix operators: "&&", "||", "^", ...
-  if getline(a:l) =~ '^\s*\%(||\|&&\|\^\)'
-    call OMLetExprBackward('',0)
-    return s:indent()
-  endif
-
   " PATTERNS
 
-  if getline(a:l) =~ '^\s*with\>'
+  if getline(a:l) =~ '^\s*\<with\>'
     call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
     return s:indent()
   endif
@@ -393,7 +422,7 @@ function GetOMLetIndent(l)
   if getline(a:l) =~ '^\s*->'
     call OMLetPatternBackward()
     if search('\%#|')
-      return s:indent()+2
+      return s:indent(1)+2
     else
       return s:indent()
     endif
@@ -415,6 +444,12 @@ function GetOMLetIndent(l)
     endif
   endif
 
+  " INFIX "&&", "||", "^", ...
+  if getline(a:l) =~ '^\s*'.s:binop_core
+    call OMLetEBackward()
+    return s:indent()
+  endif
+
   " IF/THEN/ELSE
 
   if getline(a:l) =~ '^\s*\<then\>'
@@ -422,7 +457,7 @@ function GetOMLetIndent(l)
     return s:indent()
   endif
 
-  if getline(a:l) =~ '^\s*else\>'
+  if getline(a:l) =~ '^\s*\<else\>'
     call OMLetBlockBackward('then',0)
     if s:search('\<then\_s*\%#')
       call s:searchpair('\<if\>','','\<then\>','bW')
@@ -540,17 +575,17 @@ function GetOMLetIndent(l)
     call s:searchpair('\<if\>','','\<then\>','bW')
     return s:indent()+s:i
   endif
-  if s:search('\<else\_s*\%#')
+  if s:search('\<else\>\_s*\%#')
     call OMLetBlockBackward('then',0)
     call OMLetIfHeadBackward()
     return s:indent()+s:i
   endif
 
   " MATCH
-  if s:search('\<when\_s*\%#')
+  if s:search('\<when\>\_s*\%#')
     call OMLetPatternBackward()
     if search('\%#|')
-      return s:indent()+2+s:i
+      return s:indent(1)+2+s:i
     else
       " First pattern can have no |
       return s:indent()+s:i
@@ -561,7 +596,7 @@ function GetOMLetIndent(l)
     if s:search('fun\>\s*\%#')
       return s:indent()+s:i
     elseif search('\%#|')
-      return s:indent()+2+s:i
+      return s:indent(1)+2+s:i
     else
       " First pattern can have no |
       return s:indent()+s:i
@@ -592,15 +627,20 @@ function GetOMLetIndent(l)
     endif
   endif
 
-  if s:search('\%(;\|,\|\^\|||\|&&\)\_s*\%#')
+  if s:search(';\_s*\%#')
     " Flexible indentation using s:indent() would be nice,
     " but I would actually need to return the identation
     " that *would have had* the previous expr in the sequence
     " if it has been alone on a line.
     " s/col(".")-1/s:indent()/ leads to bad things like:
-    " let x = bla ;
-    " bla
-    call OMLetExprBackward('',0)
+    " > let x = bla ;
+    " > bla
+    call OMLetBlockBackward(';',0)
+    return col(".")-1
+  endif
+
+  if s:search(s:binop)
+    call OMLetEBackward()
     return col(".")-1
   endif
 
@@ -608,7 +648,7 @@ function GetOMLetIndent(l)
 
   if OMLetAtomBackward()
     " I think s:indent() is ugly here...
-    call OMLetAtomsBackward()
+    call OMLetABackward()
     return col('.')-1+s:i
   else
     return 0
