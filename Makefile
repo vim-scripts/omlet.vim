@@ -32,4 +32,4 @@ dist:
 	done
 	tar czvf $(V).tar.gz $(V)
 	rm -rf $(V)
-	cp $(V).tar.gz $(D)/omlet.tar.gz
+	cp $(V).tar.gz omlet.tar.gz

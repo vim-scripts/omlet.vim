@@ -6,6 +6,16 @@ OMLet includes:
  - A slightly modified syntax file;
  - A much better indentation, which aims at becoming as good as Tuareg;
  - A plugin which performs folding -- I like it a lot, but if you don't want
-   it you can simply turn it using the following command in your ~/.vimrc:
+   it you can simply turn it off using the following command in your
+   ~/.vimrc:
     autocmd FileType omlet set foldmethod=manual
+   Deleting ~/.vim/ftplugin/omlet.vim also works ;)
+
+If you've been using emacs for a while, you might be a <tab> addict.
+Adding the following line to your .vimrc will make <tab> run indentation
+when hit in insert mode (C-f is the default for that in vim):
+autocmd FileType omlet set indentkeys+=!^I
+
+If you like to check type annotations, try my script at:
+http://www.vim.org/scripts/script.php?script_id=1197
 

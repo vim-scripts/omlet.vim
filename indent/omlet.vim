@@ -1,11 +1,14 @@
 " Vim indent file
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
-" Last Change: 2005 Feb 02
-" Changelog:   - Added folding expression
-"              - Corrected a few indent vs. col problems
+" Last Change: 2005 Feb 05
+" Changelog:   - Corrected a bug related with garbage-eating operators
+"                (let-in does that, if-then doesn't)
+"              - Better mangement of && || and ,
 "              - Basic jumping now goes threw ::, @, <- ... and correctly
 "                goes back on for/while statements, and strings
+"              - Corrected a few indent vs. col problems
+"              - Added folding expression
 
 " omlet.vim -- a set of files for working on OCaml code with VIm
 " Copyright (C) 2005 David Baelde
@@ -27,6 +30,7 @@
 " TODO AtomBackward() does not completely handle comments
 " it should use s:search, and maybe skip :: & co in one step
 " TODO indentation fun/arg shouldn't be strict ?
+" TODO take a look at error matching facilities provided by official ocaml.vim
 
 " Only load this indent file when no other was loaded.
 if exists("b:did_indent") || exists("*GetOMLetIndent")
@@ -71,7 +75,7 @@ endfunction
 " Goes to the beginning of the previous (exclusive) block.
 " It is stopped by any non-trivial syntax.
 
-let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
+let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
 
 function OMLetAtomBackward()
   let s = s:save()
@@ -142,32 +146,6 @@ endfunction
 " {{{ We still have problems with let, match, and else, which have no
 " closing keyword.
 
-function OMLetExprBackward(lf)
-  if a:lf != 'then' && search('\<then\_s*\%#','bW')
-    call s:searchpair('\<if\>','','\<then\>','bW')
-    call OMLetExprBackward(a:lf)
-    return 1
-
-  elseif search('\<else\_s*\%#','bW')
-    call OMLetBlockBackward("then")
-    call OMLetIfHeadBackward()
-    call OMLetExprBackward(a:lf)
-    return 1
- 
-  elseif OMLetAtomBackward()
-    call OMLetAtomsBackward()
-    call OMLetExprBackward(a:lf)
-
-  else
-    return 0
-  endif
-endfunction
-
-function OMLetPatternBackward()
-  call OMLetBlockBackward('')
-  call search('|\_s*\%#','bW') " allow failure
-endfunction
-
 function OMLetMatchHeadBackward()
   if search('\<with\>\_s*\%#','bW')
     call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
@@ -187,30 +165,64 @@ function OMLetIfHeadBackward()
   endif
 endfunction
 
+function OMLetExprBackward(lf,gbg)
+  if (a:lf != 'then' || a:gbg) && search('\<then\_s*\%#','bW')
+    call s:searchpair('\<if\>','','\<then\>','bW')
+    call OMLetExprBackward(a:lf,a:gbg)
+    return 1
+
+  elseif search('\<else\_s*\%#','bW')
+    call OMLetBlockBackward('then',0)
+    call OMLetIfHeadBackward()
+    call OMLetExprBackward(a:lf,a:gbg)
+    return 1
+ 
+  " These operators have priority on ';' so we must skip them.
+  " However, it is a bad programming style to use them at toplevel
+  " in a sequence: ignore should be around.
+  elseif search('\%(||\|&&\)\_s*\%#','bW')
+    call OMLetExprBackward(a:lf,a:gbg)
+    return 1
+
+  elseif OMLetAtomBackward()
+    call OMLetAtomsBackward()
+    call OMLetExprBackward(a:lf,a:gbg)
+    return 1
+
+  else
+    return 0
+  endif
+endfunction
+
 " Now we include let and match...
-function OMLetBlockBackward(lf)
-  if OMLetExprBackward(a:lf) " Luckily doesnt move the point on failure
-    call OMLetBlockBackward(a:lf)
+function OMLetBlockBackward(lf,gbg)
+  if OMLetExprBackward(a:lf,a:gbg) " Doesn't move the point on failure
+    call OMLetBlockBackward(a:lf,a:gbg)
 
   elseif search('\<in\>\_s*\%#','bW')
     call s:searchpair('\<let\>','','\<in\>','bW')
-    call OMLetBlockBackward(a:lf)
+    call OMLetBlockBackward(a:lf, 0) " [let ... in] eats the garbage
 
   elseif search('[;,]\_s*\%#','bW')
-    call OMLetBlockBackward(a:lf)
+    call OMLetBlockBackward(a:lf,1) " sequence is the garbage
 
   elseif search('\<when\_s*\%#','bW')
-    call OMLetBlockBackward(a:lf)
+    call OMLetBlockBackward(a:lf,0)
 
   elseif search('\%(->\|\<of\>\)\_s*\%#','bW')
     call OMLetPatternBackward()
-    call OMLetBlockBackward('match')
+    call OMLetBlockBackward('match',0)
     if a:lf != 'match'
       call OMLetMatchHeadBackward()
-      call OMLetBlockBackward(a:lf)
+      call OMLetBlockBackward(a:lf,0) " match has eaten the garbage
     endif
 
   endif
+endfunction
+
+function OMLetPatternBackward()
+  call OMLetBlockBackward('',0)
+  call search('|\_s*\%#','bW') " allow failure
 endfunction
 
 " }}}
@@ -220,15 +232,24 @@ endfunction
 " assuming that the previous lines are well indented.
 
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys+=0=let,0=and,0=in,0=end,0),0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type
+setlocal indentkeys=0{,0},!^F,o,O,0=let,0=and,0=in,0=end,0),0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&
+" TODO cannot indent when || is typed at begining of line
+
+let s:mode_relative = 0
+
+function OMLetSetRelative(b)
+  let s:mode_relative = a:b
+endfunction
 
 function s:indent(l)
-  " Two possible indentation modes:
-  " 1. (stricter) relative
-  " return col(a:l)-1
-
-  " 2. (more usual) incremental
-  return indent(a:l)
+  if s:mode_relative
+    " Two possible indentation modes:
+    " 1. (stricter) relative
+    return col(a:l)-1
+  else
+    " 2. (more usual) incremental
+    return indent(a:l)
+  endif
 endfunction
 
 function GetOMLetIndent(l)
@@ -243,7 +264,8 @@ function GetOMLetIndent(l)
     call searchpair('(\*','','\*)','bW')
     if s != s:save()
       " We were strictly inside the comment, and we are now at its beginning
-      return col('.')
+      call search('\*[^\*]')
+      return col('.')-1
     endif
     " No need to restore, there was no move
   endif
@@ -300,19 +322,13 @@ function GetOMLetIndent(l)
   endif
 
   if getline(a:l) =~ '^\s*else\>'
-    call OMLetBlockBackward('then')
+    call OMLetBlockBackward('then',0)
     if s:search('\<then\_s*\%#')
       call s:searchpair('\<if\>','','\<then\>','bW')
     endif
     return col(".")-1
   endif
   
-  if getline(a:l) =~ '^\s*|'
-    call OMLetBlockBackward('match')
-    call OMLetMatchHeadBackward()
-    return col(".")+1
-  endif
-
   if getline(a:l) =~ '^\s*->'
     call OMLetPatternBackward()
     return col(".")+1
@@ -356,6 +372,18 @@ function GetOMLetIndent(l)
     return s:indent(".")
   endif
 
+  " && and ||
+  if getline(a:l) =~ '^\s*\%(||\|&&\)'
+    call OMLetExprBackward('',0)
+    return col(".")-1
+  endif
+
+  if getline(a:l) =~ '^\s*|'
+    call OMLetBlockBackward('match',0)
+    call OMLetMatchHeadBackward()
+    return col(".")+1
+  endif
+
   " }}}
 
   " {{{ Beginning of blocks
@@ -367,14 +395,13 @@ function GetOMLetIndent(l)
 
   if s:search('\<then\>\_s*\%#')
     call s:searchpair('\<if\>','','\<then\>','bW')
-    return s:indent(".")+2
+    return col(".")+1
   endif
   
   if s:search('\<else\_s*\%#')
-    call OMLetBlockBackward('then')
+    call OMLetBlockBackward('then',0)
     call OMLetIfHeadBackward()
-    return s:indent(".")+2
-    return 0
+    return col(".")+1
   endif
 
   if s:search('\<with\>\_s*\%#')
@@ -407,14 +434,16 @@ function GetOMLetIndent(l)
 
   if s:search('->\_s*\%#')
     call OMLetPatternBackward()
-    call OMLetBlockBackward('match')
+    call OMLetBlockBackward('match',0)
     call OMLetMatchHeadBackward()
     if search('\%#fun\>')
-      return col(".")+1
+      return s:indent(".")+2
     else
       return col(".")+5
     endif
   endif
+
+  " }}}
 
   " Sequence: find previous instruction's base indentation
   
@@ -422,8 +451,8 @@ function GetOMLetIndent(l)
     return 0
   endif
   
-  if s:search(';\_s*\%#')
-    call OMLetExprBackward('')
+  if s:search('\%(;\|,\|||\|&&\)\_s*\%#')
+    call OMLetExprBackward('',0)
     return col(".")-1
   endif
 
@@ -436,7 +465,6 @@ function GetOMLetIndent(l)
     return 0
   endif
 
-  " }}}
 endfunction
 
 " }}}
