@@ -6,13 +6,25 @@ OMLet includes:
  - A slightly modified syntax file;
  - A much better indentation, which aims at becoming as good as Tuareg;
  - A plugin which performs folding, plus the official features
-   you can simply turn folding off: define no_ocaml_folding in your .vimrc
-   > let no_ocaml_folding=1
-   If you don't want omlet to set key bindings, define no_ocaml_maps or
-   no_plugin_maps.
 
-Tricks
-------
+Customization
+-------------
+
+You can set up a few variables in your vimrc in order to customize omlet's 
+behavior. More will be coming...
+
+Disable folding
+> let no_ocaml_folding = 1
+
+Do not indent after let-in
+> let ocaml_noindent_let = 1
+
+Don't set key bindings (any of the following is sufficient)
+> let no_plugin_maps = 1
+> let no_ocaml_maps = 1
+
+Tips
+----
 
 If you like to check type annotations, try my script at:
 http://www.vim.org/scripts/script.php?script_id=1197
@@ -35,4 +47,6 @@ tuareg-mode, it is recommended to use space-only indentation with emacs:
 Please make sure that the following line is in your ~/.vimrc, otherwise
 indentation won't be loaded automatically:
 filetype plugin indent on
+
+I also recommend using otags in order to have tags working on OCaml.
 

@@ -142,6 +142,11 @@ function OMLetFoldLevel(l)
     return (indent(a:l)/2)+1
   endif
 
+  " Folds end on ;;
+  if getline(a:l) =~ '^\s*;;'
+    exe 'return "<' (indent(a:l)/2)+1 '"'
+  endif
+
   " Comments around folds aren't merged to them.
   if synIDattr(synID(a:l, indent(a:l)+1, 0), "name") == "ocamlComment"
     return -1
