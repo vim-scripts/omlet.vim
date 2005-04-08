@@ -2,8 +2,11 @@
 " Language:    OCaml
 " Maintainer:  David Baelde <firstname.name@ens-lyon.org>
 " URL:         http://ocaml.info/vim/indent/omlet.vim
-" Last Change: 2005 Mar 25
+" Last Change: 2005 Apr 08
 " Changelog:
+"         0.13 - Comments are now always aligned on the next block
+"              - Corrected a bug related to comment un-skipping
+"              - Added 'c', "=" and [|...|] handling. Sorry for the delay :)
 "         0.12 - Added OCaml modeline support
 "              - Prevented a few abusive autoindentation, when atoms begin
 "                like keywords ("incr"...)
@@ -46,7 +49,7 @@ setlocal expandtab
 setlocal fo=croq
 syntax enable
 setlocal indentexpr=GetOMLetIndent(v:lnum)
-setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*,0\,,0=::,0@,0+,0/,0-
+setlocal indentkeys=0{,0},!^F,o,O,0=let\ ,0=and,0=in,0=end,0),0],0=\|],0=do,0=done,0=then,0=else,0=with,0\|,0=->,0=;;,0=module,0=struct,0=sig,0=class,0=object,0=val,0=method,0=initializer,0=inherit,0=open,0=include,0=exception,0=external,0=type,0=&&,0^,0*,0\,,0=::,0@,0+,0/,0-
 
 " Get the modeline
 let s:s = line2byte(line('.'))+col('.')-1
@@ -142,7 +145,7 @@ endfunction
 " It is stopped by any non-trivial syntax.
 " The block moves are really the heart of omlet!
 
-let s:blockstop = '\(\%^\|(\|{\|\[\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<fun\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
+let s:blockstop = '\(\%^\|(\|{\|\[\|\[|\|\<begin\>\|;\|,\|&&\|||\|\<try\>\|\<match\>\|\<with\>\||\|->\|\<when\>\|\<of\>\|\<fun\>\|\<function\>\|=\|\<let\>\|\<in\>\|\<for\>\|\<to\>\|\<do\>\|\<while\>\|\<if\>\|\<then\>\|\<else\>\|\<sig\>\|\<struct\>\|\<object\>\)\_s*\%#'
 
 let s:binop_core = '\%(\<lor\>\|\<land\>\|\<lsr\>\|\<lsl\>\|\<asr\>\|\<asl\>\|\<mod\>\|,\|::\|@\|\^\|||\|&&\|\.\|<-\|:=\|+\|\*\|/\|-\)'
 " Thanks to ".", floating point arith operators are included...
@@ -163,6 +166,15 @@ function OMLetAtomBackward()
 
   elseif search('}\_s*\%#','bW')
     return s:searchpair('{','','}','bW')
+
+  elseif search("'\\_s*\\%#",'bW')
+    while search("\\_.'",'bW')
+      if synIDattr(synID(line("."), col("."), 0), "name") != "ocamlCharacter"
+        call search("'")
+        return 1
+      endif
+    endwhile
+    throw "Couldn't find beginning of character"
 
   elseif search('"\_s*\%#','bW')
     while search('\_."','bW')
@@ -240,14 +252,14 @@ endfunction
 " which have no closing keyword.
 
 function OMLetMatchHeadBackward()
-  if search('\<with\>\_s*\%#','bW')
+  if s:search('\<with\>\_s*\%#')
     call s:searchpair('\%(\<try\>\|\<match\>\)','','\<with\>','bW')
     return 1
-  elseif search('\<fun\>\_s*\%#','bW')
+  elseif s:search('\<fun\>\_s*\%#')
     return 1
-  elseif search('\<function\>\_s*\%#','bW')
+  elseif s:search('\<function\>\_s*\%#')
     return 1
-  elseif search('\<type\>\_[^=]\+=\_s*\%#','bW')
+  elseif s:search('\<type\>\_[^=]\+=\_s*\%#')
     return 1
   else
     return 0
@@ -275,7 +287,7 @@ function OMLetBlockBackward(lf,gbg)
       " Undo some abusive comment jumping...
       " Go to the real end of comment, then to the next meaningful point
       call search(')')
-      call search('\w')
+      call search('\S')
     endwhile
     return 1
 
@@ -385,14 +397,8 @@ function GetOMLetIndent(l)
     " No need to restore, there was no move
   endif
 
-  " A second comment is aligned on the first one..
-  if getline(a:l) =~ '^\s*(\*' && search('\*)\_s*\%#','bW')
-    call searchpair('(\*','','\*)','bW')
-    return indent(".")
-  endif
-
   " Comments with a blank line before them are indented as the next block
-  if getline(a:l) =~ '^\s*(\*' && getline(a:l-1) =~ '^\s*$'
+  if getline(a:l) =~ '^\s*(\*'
     let ok = 1
     while ok == 1
       call searchpair('(\*','','\*)')
@@ -406,7 +412,7 @@ function GetOMLetIndent(l)
 
     let new = nextnonblank(line('.')+1)
     if new == 0 || new == a:l
-      return 0
+      return -1
     else
       return GetOMLetIndent(new)
     endif
@@ -435,6 +441,11 @@ function GetOMLetIndent(l)
 
   if getline(a:l) =~ '^\s*\]'
     call s:searchpair('\[','','\]','bW')
+    return s:indent()
+  endif
+
+  if getline(a:l) =~ '^\s*|\]'
+    call s:searchpair('\[|','','|\]','bW')
     return s:indent()
   endif
 
@@ -585,7 +596,7 @@ function GetOMLetIndent(l)
   if s:search('\(\<struct\>\|\<sig\>\|\<class\>\)\_s*\%#')
     return s:indent()+b:i_struct
   endif
-  if s:search('\(\<while\>\|\<for\>\|\<if\>\|\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\<initializer\>\)\_s*\%#')
+  if s:search('\(\<while\>\|\<for\>\|\<if\>\|\<begin\>\|\<match\>\|\<try\>\|(\|{\|\[\|\[|\|\<initializer\>\)\_s*\%#')
     return s:indent()+b:i
   endif
   if s:search('\%(\<let\>\|\<and\>\|\<module\>\|\<val\>\|\<method\>\)\_[^=]\+=\_s*\%#')
@@ -686,15 +697,22 @@ function GetOMLetIndent(l)
     return col(".")-1
   endif
 
+  " = is a special binop
+  if s:search('=\_s*\%#')
+    call OMLetEBackward()
+    return s:indent()+b:i
+  endif
+
   " Application: indentation between a function and its arguments
 
   if OMLetAtomBackward()
     " I think s:indent() is ugly here...
     call OMLetABackward()
     return col('.')-1+b:i
-  else
-    return 0
   endif
+
+  " This shouldn't happen
+  return 0
 
 endfunction
 

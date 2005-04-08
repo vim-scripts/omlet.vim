@@ -2,6 +2,11 @@
 ChangeLog for OMLet, the better OCaml mode for VIm
 Copyright (c) 2005 David Baelde
 
+2005/04/08 (0.13)
+* Comments are now always aligned on the next block
+* Corrected a bug related to comment un-skipping
+* Added 'c', "=" and [|...|] handling. Sorry for the delay :)
+
 2005/03/25 (0.12)
 * OMLet now overrides OCaml correctly. That's ugly but needed, because OCaml is installed with VIm.
 * Added OCaml modeline support
